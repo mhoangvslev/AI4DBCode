@@ -18,7 +18,7 @@ services:
     ports:
       - "5432:5432"
     
-  rtos-cpu:
+  rtos:
     depends_on: 
       - postgres
     container_name: "rtos"
@@ -38,13 +38,7 @@ services:
       RTOS_DB_HOST: "postgresql://${RTOS_DB_USER}:${RTOS_DB_PASSWORD}@postgres/${RTOS_DB_NAME}"
       RTOS_DB_PORT: "5433"
     networks: [ postgresNetwork ]
-    devices:
-      - /dev/nvidia0:/dev/nvidia0
-      - /dev/nvidiactl:/dev/nvidiactl
-      - /dev/nvidia-modeset:/dev/nvidia-modeset
-      - /dev/nvidia-uvm:/dev/nvidia-uvm
-      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
-    entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "python CostTraining.py"'
+    #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "python CostTraining.py"'
 
 networks:
   postgresNetwork:

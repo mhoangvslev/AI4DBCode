@@ -23,7 +23,7 @@ elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
         -e RTOS_DB_PORT="5432" \
         --network host \
         -p '5432:5432' \
-        ai4dbcode_rtos-cpu
+        ai4dbcode_rtos
 elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
     docker run -it --rm \
         --gpus all \
@@ -36,13 +36,13 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         -e RTOS_DB_USER="postgres" \
         -e RTOS_DB_NAME="imdbload" \
         -e RTOS_DB_HOST="0.0.0.0" \
-        -e RTOS_DB_PORT="5433" \
-        --network postgresNetwork \
-        -p '5433:5432' \
-        ai4dbcode_rtos-cpu
+        -e RTOS_DB_PORT="5432" \
+        --network host \
+        -p '5432:5432' \
+        ai4dbcode_rtos
 elif [ "$1" = build ]; then
     if [ "$2" = "postgres" -o "$2" = "rtos-cpu" -o "$2" = "rtos-gpu" ]; then
-        docker-compose build $2
+        docker-compose build $( echo "$2" | egrep -o '^[a-z0-9]+')
     else
         echo "Cannot build unknown target $2";
         exit -1;
