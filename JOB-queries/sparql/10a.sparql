@@ -1,0 +1,25 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?ci <http://imdb.org/cast_info#movie_id> ?t.
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+
+  # Attribute selection clauses
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?chn <http://imdb.org/char_name#name> ?chn_name.
+  ?ci <http://imdb.org/cast_info#note> ?ci_note.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[ru]".
+  ?rt <http://imdb.org/role_type#role> "actor".
+  FILTER (regex(?ci_note, '\\(voice\\)') && regex(?ci_note, '\\(uncredited\\)')).
+  FILTER (?t_production_year > 2005).
+
+}

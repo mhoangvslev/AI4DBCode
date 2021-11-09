@@ -1,0 +1,33 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?at <http://imdb.org/aka_title#movie_id> ?t.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?at <http://imdb.org/aka_title#movie_keyword#movie_id#movie_id> ?mk.
+  ?at <http://imdb.org/aka_title#movie_info#movie_id#movie_id> ?mi.
+  ?at <http://imdb.org/aka_title#movie_companies#movie_id#movie_id> ?mc.
+
+  # Attribute selection clauses
+  ?mi <http://imdb.org/movie_info#note> ?mi_note .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+  ?at <http://imdb.org/aka_title#title> ?at_title .
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]".
+  ?it1 <http://imdb.org/info_type#info> "release dates".
+  FILTER regex(?mi_note, "internet").
+  FILTER (?t_production_year > 1990) .
+
+}

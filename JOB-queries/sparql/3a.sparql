@@ -1,0 +1,27 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?mi_info {
+    "Sweden" "Norway" "Germany" "Denmark"
+    "Swedish" "Denish" "Norwegian" "German"
+  }
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+
+  # Filter clauses
+  FILTER regex(?k_keyword, "sequel").
+  FILTER (?t_production_year > 2005) .
+
+}

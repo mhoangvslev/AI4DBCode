@@ -1,0 +1,48 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?k_keyword {
+    "magnet" "superhero" "marvel-comics" "based-on-comic" "tv-special" "fight"
+    "violence" "web" "claw" "laser"
+  }
+
+  # Join clauses
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn .
+  ?ci <http://imdb.org/cast_info#person_id> ?n .
+  ?cc <http://imdb.org/complete_cast#subject_id> ?cct1.
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct2.
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?ci <http://imdb.org/cast_info#complete_cast#movie_id#movie_id> ?cc.
+  ?ci <http://imdb.org/cast_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?cc <http://imdb.org/complete_cast#movie_info_idx#movie_id#movie_id> ?midx.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+  ?midx <http://imdb.org/movie_info_idx#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+  ?cct2 <http://imdb.org/comp_cast_type#kind> ?cct2_kind .
+  ?chn <http://imdb.org/char_name#name> ?chn_name .
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "cast".
+  ?it2 <http://imdb.org/info_type#info> "rating".
+  ?kt <http://imdb.org/kind_type#kind> "movie".
+  FILTER (str(?midx_info) > str("7.0")).
+  FILTER (?t_production_year > 2000).
+  FILTER regex(?cct2_kind, "complete").
+  FILTER (regex(?chn_name, "[mM]an")).
+
+}

@@ -1,0 +1,38 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct1.
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+  ?cc <http://imdb.org/complete_cast#movie_info#movie_id#movie_id> ?mi.
+  ?cc <http://imdb.org/complete_cast#movie_companies#movie_id#movie_id> ?mc.
+
+  # Attribute selection clauses
+  ?mi <http://imdb.org/movie_info#note> ?mi_note .
+  ?mi <http://imdb.org/movie_info#info> ?mi_info .
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "complete+verified".
+  ?c <http://imdb.org/company_name#country_code> "[us]" .
+  ?it <http://imdb.org/info_type#info> "release dates".
+  ?kt <http://imdb.org/kind_type#kind> "movie".
+  FILTER regex(?mi_note, "internet").
+  FILTER (regex(?mi_info, "USA:.* 199") || regex(?mi_info, "USA:.* 200")).
+  FILTER (?t_production_year >= 2000) .
+
+}

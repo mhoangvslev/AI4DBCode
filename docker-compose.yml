@@ -23,7 +23,7 @@ services:
       - postgres
     container_name: "rtos"
     build:
-      context: .
+      context: ./
       dockerfile: Dockerfile
       network: "host"
       args:

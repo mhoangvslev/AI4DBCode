@@ -1,0 +1,19 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+
+  # Shortcuts
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[de]" .
+  ?k <http://imdb.org/keyword#keyword> "character-name-in-title".
+
+}

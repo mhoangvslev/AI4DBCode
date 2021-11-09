@@ -1,0 +1,32 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it2.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it1.
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx.
+
+  # Attribute selection clauses
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?c <http://imdb.org/company_name#name> ?c_name.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]".
+  ?ct <http://imdb.org/company_type#kind> "production companies".
+  ?it1 <http://imdb.org/info_type#info> "rating".
+  ?it2 <http://imdb.org/info_type#info> "release dates".
+  ?kt <http://imdb.org/kind_type#kind> "movie".
+  FILTER (?t_title != '') .
+  FILTER (regex(?t_title, "Champion") || regex(?t_title, "Loser")) .
+
+}

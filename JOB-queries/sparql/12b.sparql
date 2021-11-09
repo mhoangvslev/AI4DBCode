@@ -1,0 +1,33 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1 .
+  ?midx	<http://imdb.org/movie_info_idx#movie_id> ?t .
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2 .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+
+  # Shortcuts
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+
+  # Attribute selection clauses
+  ?mi <http://imdb.org/movie_info#info> ?mi_info .
+  ?c <http://imdb.org/company_name#name> ?c_name .
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+  ?ct <http://imdb.org/company_type#kind> ?ct_kind .
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]".
+  ?it1 <http://imdb.org/info_type#info> "budget".
+  ?it2 <http://imdb.org/info_type#info> "bottom 10 rank".
+  FILTER (?ct_kind = "production companies" || ?ct_kind = "distributors").
+  FILTER (?t_production_year > 2000) .
+  FILTER (regex(?t_title, "^Birdemic") || regex(?t_title, "Movie")).
+
+}
+# ORDER BY ?mi_info ?t_title LIMIT 10

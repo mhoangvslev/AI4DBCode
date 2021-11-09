@@ -1,0 +1,34 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?an <http://imdb.org/aka_name#person_id> ?n .
+  ?pi <http://imdb.org/person_info#person_id> ?n.
+  ?pi <http://imdb.org/person_info#info_type_id> ?it.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ml <http://imdb.org/movie_link#linked_movie_id> ?t.
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt.
+
+  # Shortcuts
+  ?an <http://imdb.org/aka_name#person_info#person_id#person_id> ?pi.
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+  ?ci <http://imdb.org/cast_info#person_info#person_id#person_id> ?pi.
+  ?ci <http://imdb.org/cast_info#movie_link#movie_id#linked_movie_id> ?ml .
+
+  # Attribute selection clauses
+  ?an <http://imdb.org/aka_name#name> ?an_name.
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?n <http://imdb.org/name__t#name_pcode_cf> ?n_pcode_cf .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?n <http://imdb.org/name__t#gender> "m".
+  ?it <http://imdb.org/info_type#info> "mini biography".
+  ?lt <http://imdb.org/link_type#link> "features" .
+  ?pi <http://imdb.org/person_info#note> "Volker Boehm".
+  FILTER regex(?an_name, "a").
+  FILTER regex(?n_pcode_cf, "^D").
+  FILTER (?t_production_year >= 1980 && ?t_production_year <= 1984) .
+
+}

@@ -1,0 +1,53 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?k_keyword {
+    "murder-in-title" "murder" "blood" "violence"
+  }
+  VALUES ?kt_kind {
+    "movie" "episode"
+  }
+  VALUES ?mi_info {
+    "Germany" "German" "USA" "American"
+  }
+
+  # Join clauses
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx.
+  ?midx <http://imdb.org/movie_info_idx#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?c <http://imdb.org/company_name#country_code> ?c_country_code .
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?kt <http://imdb.org/kind_type#kind> ?kt_kind.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?mc <http://imdb.org/movie_companies#note> ?mc_note.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?c <http://imdb.org/company_name#name> ?c_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "countries".
+  ?it2 <http://imdb.org/info_type#info> "rating".
+  FILTER (str(?c_country_code) != "[us]").
+  FILTER (!regex(?mc_note, '\\(USA\\)') && regex(?mc_note, '\\(200.*\\)')).
+  FILTER (str(?midx_info) < str("7.0")).
+  FILTER (?t_production_year > 2009) .
+
+}

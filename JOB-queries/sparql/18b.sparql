@@ -1,0 +1,39 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(head writer)" "(writer)" "(written by)" "(story)" "(story editor)"
+  }
+  VALUES ?mi_info {
+    "Horror" "Thriller"
+  }
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1 .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n .
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2 .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t .
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "genres".
+  ?it2 <http://imdb.org/info_type#info> "rating".
+  ?n <http://imdb.org/name__t#gender> "f".
+  FILTER (str(?midx_info) > str("8.0")) .
+  FILTER (?t_production_year >= 2008 && ?t_production_year <= 2014) .
+  # FILTER NOT EXISTS { ?mi <http://imdb.org/movie_info#note> ?mi_note } .
+
+}

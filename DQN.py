@@ -6,7 +6,7 @@ import torch.nn.functional as F
 #import torchvision.transforms as T
 import torch
 from collections import namedtuple
-from sqlSample import JoinTree
+from utils.sqlSample import JoinTree
 import torch.optim as optim
 import numpy as np
 from math import log

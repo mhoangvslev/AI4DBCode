@@ -1,0 +1,24 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it.
+
+  # Shortcuts
+  ?midx <http://imdb.org/movie_info_idx#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  #filter
+  ?it <http://imdb.org/info_type#info> "rating".
+  FILTER regex(?k_keyword, "sequel").
+  FILTER (str(?midx_info) > str("9.0")) .
+  FILTER (?t_production_year > 2010) .
+
+}

@@ -1,0 +1,62 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(voice) (uncredited)"
+    "(voice: English version)"
+    "(voice: Japanese version)"
+    "(voice)"
+  }
+
+  # Join clauses
+  ?an <http://imdb.org/aka_name#person_id> ?n.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?pi <http://imdb.org/person_info#person_id> ?n.
+  ?pi <http://imdb.org/person_info#info_type_id> ?it3.
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?cc <http://imdb.org/complete_cast#subject_id> ?cct1.
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct2.
+
+  # Shortcuts
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?ci <http://imdb.org/cast_info#complete_cast#movie_id#movie_id> ?cc.
+  ?cc <http://imdb.org/complete_cast#movie_info#movie_id#movie_id> ?mi.
+  ?cc <http://imdb.org/complete_cast#movie_companies#movie_id#movie_id> ?mc.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?mi <http://imdb.org/movie_info#info> ?mi_info .
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?chn <http://imdb.org/char_name#name> "Queen".
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "cast".
+  ?cct2 <http://imdb.org/comp_cast_type#kind> "complete+verified".
+  ?c <http://imdb.org/company_name#country_code> "[us]".
+  ?it1 <http://imdb.org/info_type#info> "release dates".
+  ?it3 <http://imdb.org/info_type#info> "trivia".
+  ?k <http://imdb.org/keyword#keyword> "computer-animation".
+  ?n <http://imdb.org/name__t#gender> "f".
+  ?rt <http://imdb.org/role_type#role> "actress".
+  FILTER (regex(?mi_info, "Japan:.*200") || regex(?mi_info, "USA:.*200")).
+  FILTER (?t_production_year >= 2000 && ?t_production_year <= 2010) .
+  FILTER regex(?n_name, "An").
+
+}

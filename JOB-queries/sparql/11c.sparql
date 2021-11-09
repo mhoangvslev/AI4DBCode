@@ -1,0 +1,35 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?k_keyword { "sequel" "revenge" "based-on-novel" } .
+
+  # Join clauses
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt.
+  ?ml <http://imdb.org/movie_link#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?mc <http://imdb.org/movie_companies#note> ?mc_note .
+
+  # Shortcuts
+  ?mk <http://imdb.org/movie_keyword#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?c <http://imdb.org/company_name#name> ?c_name .
+  ?c <http://imdb.org/company_name#country_code> ?c_country_code .
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?ct <http://imdb.org/company_type#kind> ?ct_kind .
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+
+  # Filter clauses
+  FILTER (?ct_kind != "production companies").
+  FILTER (?c_country_code != "[pl]").
+  FILTER (regex(?c_name, "^20th Century Fox") || regex(?c_name, "^Twentieth Century Fox")).
+  FILTER (?t_production_year > 1950).
+
+}

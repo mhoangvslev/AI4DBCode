@@ -1,0 +1,23 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?an <http://imdb.org/aka_name#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+
+  # Shortcuts
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+
+  # Attribute selection clauses
+  ?an <http://imdb.org/aka_name#name> ?an_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]" .
+  ?rt <http://imdb.org/role_type#role> "writer".
+
+}

@@ -1,0 +1,35 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(voice: Japanese version)"
+    "(voice) (uncredited)"
+    "(voice: English version)"
+    "(voice)"
+  }
+
+  # Join clauses
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?an <http://imdb.org/aka_name#person_id> ?n .
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+  ?an <http://imdb.org/aka_name#name> ?an_name.
+  ?chn <http://imdb.org/char_name#name> ?chn_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]" .
+  ?n <http://imdb.org/name__t#gender> "f".
+  ?rt <http://imdb.org/role_type#role> "actress".
+
+}

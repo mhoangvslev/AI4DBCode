@@ -1,0 +1,53 @@
+SELECT * WHERE {
+
+  # Values clauses
+  VALUES ?mi_info {
+    "Sweden" "Norway" "Germany" "Denmark" "Swedish"
+    "Denish" "Norwegian" "German" "English"
+  }
+
+  # Join clauses
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt.
+  ?ml <http://imdb.org/movie_link#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct .
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?cc <http://imdb.org/complete_cast#subject_id> ?cct1.
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct2.
+
+  # Shortcuts
+  ?mk <http://imdb.org/movie_keyword#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mi <http://imdb.org/movie_info#movie_link#movie_id#movie_id> ?ml.
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?cc <http://imdb.org/complete_cast#movie_link#movie_id#movie_id> ?ml.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+  ?cc <http://imdb.org/complete_cast#movie_companies#movie_id#movie_id> ?mc.
+  ?cc <http://imdb.org/complete_cast#movie_info#movie_id#movie_id> ?mi.
+
+  # Attribute selection clauses
+  ?c <http://imdb.org/company_name#country_code> ?c_country_code .
+  ?c <http://imdb.org/company_name#name> ?c_name .
+  ?lt <http://imdb.org/link_type#link> ?lt_link .
+  ?mi <http://imdb.org/movie_info#info> ?mi_info .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "cast".
+  ?cct2 <http://imdb.org/comp_cast_type#kind> "complete".
+  ?ct <http://imdb.org/company_type#kind> "production companies".
+  ?k <http://imdb.org/keyword#keyword> "sequel".
+  FILTER (str(?c_country_code) != "[pl]").
+  FILTER (regex(?c_name, "Film") || regex(?c_name, "Warner")).
+  FILTER regex(?lt_link, "follow").
+  FILTER (?t_production_year >= 1950 && ?t_production_year <= 2010) .
+  # FILTER NOT EXISTS { ?mc <http://imdb.org/movie_companies#note> ?mc_note } .
+
+}

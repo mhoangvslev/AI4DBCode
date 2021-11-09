@@ -1,0 +1,39 @@
+SELECT * WHERE {
+
+  # Value clauses
+  values ?ci_note {
+    "(voice)" "(voice: Japanese version)" "(voice) (uncredited)"
+    "(voice: English version)"
+  }
+
+  # Join clauses
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?an <http://imdb.org/aka_name#person_id> ?n.
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+
+  # Attribute selection clauses
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]".
+  ?it <http://imdb.org/info_type#info> "release dates".
+  ?rt <http://imdb.org/role_type#role> "actress" .
+  ?n <http://imdb.org/name__t#gender> "f" .
+  FILTER (?t_production_year > 2000) .
+
+}

@@ -1,5 +1,5 @@
 
-from JOBParser import TargetTable,FromTable,Comparison
+from utils.JOBParser import TargetTable,FromTable,Comparison
 max_column_in_table = 15
 import torch
 import torch
@@ -241,11 +241,17 @@ class JoinTree:
                 return fold.add('leaf',self.db_info.name2idx[self.aliasname2fullname[node]],self.table_fea_set[node]).split(2)
         encoding, _ = encode_node(node_idx)
         return encoding
-    def toSql(self,):
+    def toSql(self, format):
         root = self.total - 1
-        res = "select "+",\n".join([str(x) for x in self.target_table_list])+"\n"
-        res  += "from " + self.recTable(root)[1:-1]
+        res = "select" + ",\n".join([str(x) for x in self.target_table_list]) + "\n"
+
+        if format == "sql":
+            res += "FROM " + self.recTable(root)[1:-1]
+        elif format == "sparql":
+            res += f"WHERE { {self.recTable(root)[1:-1]} }"
+
         res += ";"
+
         return res
     def plan2Cost(self):
         sql = self.toSql()

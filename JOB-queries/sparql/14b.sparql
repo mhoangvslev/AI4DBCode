@@ -1,0 +1,41 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?mi_info {
+    "Sweden" "Norway" "Germany" "Denmark" "Swedish"
+    "Denish" "Norwegian" "German" "USA" "American"
+  }
+  VALUES ?k_keyword {
+    "murder-in-title" "murder"
+  }
+
+  # Join clauses
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+
+  # Shortcuts
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?midx <http://imdb.org/movie_info_idx#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "countries".
+  ?it2 <http://imdb.org/info_type#info> "rating".
+  ?kt <http://imdb.org/kind_type#kind> "movie".
+  FILTER (str(?midx_info) > str("6.0")) .
+  FILTER (?t_production_year > 2010) .
+  FILTER (regex(?t_title, "murder") || regex(?t_title, "Murder") || regex(?t_title, "Mord")) .
+
+}

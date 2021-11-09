@@ -1,0 +1,32 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note { "(executive producer)" "(producer)" }
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1 .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n .
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2 .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t .
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "budget".
+  ?it2 <http://imdb.org/info_type#info> "votes".
+  ?n <http://imdb.org/name__t#gender> "m".
+  FILTER regex(?n_name, "Tim").
+
+}

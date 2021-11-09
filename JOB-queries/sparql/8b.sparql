@@ -1,0 +1,33 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?an <http://imdb.org/aka_name#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+
+  # Shortcuts
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+
+  # Attribute selection clauses
+  ?mc <http://imdb.org/movie_companies#note> ?mc_note.
+  ?n <http://imdb.org/name__t#name> ?n_name.
+  ?an <http://imdb.org/aka_name#name> ?an_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+
+  # Filter clauses
+  ?ci <http://imdb.org/cast_info#note> "(voice: English version)" .
+  ?c <http://imdb.org/company_name#country_code> "[jp]" .
+  ?rt <http://imdb.org/role_type#role> "actress".
+
+  FILTER (regex(?mc_note, '\\(Japan\\)') && !regex(?mc_note, '\\(USA\\)')).
+  FILTER (regex(?mc_note, '\\(2006\\)') || regex(?mc_note, '\\(2007\\)')).
+  FILTER (regex(?n_name, "Yo") && !regex(?n_name, "Yu")) .
+  FILTER (regex(?t_title, "^One Piece") || regex(?t_title, "^Dragon Ball Z")) .
+  FILTER (?t_production_year >= 2006 && ?t_production_year <= 2007) .
+
+}

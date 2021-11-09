@@ -1,18 +1,19 @@
 
-from PGUtils import PGRunner
-from sqlSample import sqlInfo
+from utils.DBUtils import PGRunner, ISQLRunner
+from utils.sqlSample import sqlInfo
 import numpy as np
 from itertools import count
 from math import log
 import random
 import time
 from DQN import DQN,ENV
-from TreeLSTM import SPINN
-from JOBParser import DB
+from utils.TreeLSTM import SPINN
+from utils.JOBParser import DB
 import copy
 import torch
 from torch.nn import init
 from ImportantConfig import Config
+import os
 
 config = Config()
 
@@ -39,9 +40,30 @@ for name, param in policy_net.named_parameters():
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
-pgrunner = PGRunner(config.dbName,config.userName,config.password,config.ip,config.port,isCostTraining=True,latencyRecord = False,latencyRecordFile = "Cost.json")
 
-dqn = DQN(policy_net,target_net,db_info,pgrunner,device)
+runner = (
+    PGRunner(
+        config.sql_dbName,
+        config.sql_userName,
+        config.sql_password,
+        config.sql_ip,
+        config.sql_port,
+        isCostTraining=True,
+        latencyRecord = False,
+        latencyRecordFile = "Cost.json"
+    ) if os.environ["RTOS_ENGINE"] == "sql" else
+    ISQLRunner(
+        config.isql_endpoint,
+        config.isql_graph,
+        config.isql_host,
+        config.isql_port,
+        isCostTraining=True,
+        latencyRecord = False,
+        latencyRecordFile = "Cost.json"
+    )
+)
+
+dqn = DQN(policy_net,target_net,db_info,runner,device)
 
 def k_fold(input_list,k,ix = 0):
     li = len(input_list)
@@ -72,7 +94,7 @@ def QueryLoader(QueryDir):
         with open(filename, "r") as f:
             data = f.readlines()
             one_sql = "".join(data)
-            sql_list.append(sqlInfo(pgrunner,one_sql,filename))
+            sql_list.append(sqlInfo(runner,one_sql,filename))
     return sql_list
 
 def resample_sql(sql_list):
@@ -84,7 +106,7 @@ def resample_sql(sql_list):
         #         sql = val_list[i_episode%len(train_list)]
         pg_cost = sql.getDPlantecy()
         #         continue
-        env = ENV(sql,db_info,pgrunner,device)
+        env = ENV(sql,db_info,runner,device)
 
         for t in count():
             action_list, chosen_action,all_action = dqn.select_action(env,need_random=False)
@@ -126,7 +148,7 @@ def train(trainSet,validateSet):
         #     sql = random.sample(train_list_back,1)[0][0]
         sqlt = random.sample(trainSet[0:],1)[0]
         pg_cost = sqlt.getDPlantecy()
-        env = ENV(sqlt,db_info,pgrunner,device)
+        env = ENV(sqlt,db_info,runner,device)
 
         previous_state_list = []
         action_this_epi = []

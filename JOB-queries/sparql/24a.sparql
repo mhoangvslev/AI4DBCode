@@ -1,0 +1,54 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(voice)"
+    "(voice: Japanese version)"
+    "(voice) (uncredited)"
+    "(voice: English version)"
+  }
+  VALUES ?k_keyword {
+    "hero" "martial-arts" "hand-to-hand-combat"
+  }
+
+  # Join clauses
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t .
+  ?mc <http://imdb.org/movie_companies#company_id> ?c .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it .
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#role_id> ?rt.
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?an <http://imdb.org/aka_name#person_id> ?n .
+
+  # Shortcuts
+  ?mc <http://imdb.org/movie_companies#movie_info#movie_id#movie_id> ?mi.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+  ?ci <http://imdb.org/cast_info#movie_companies#movie_id#movie_id> ?mc.
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?an <http://imdb.org/aka_name#cast_info#person_id#person_id> ?ci.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note.
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?chn <http://imdb.org/char_name#name>  ?chn_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?c <http://imdb.org/company_name#country_code> "[us]" .
+  ?it <http://imdb.org/info_type#info> "release dates".
+  ?n <http://imdb.org/name__t#gender> "f".
+  ?rt <http://imdb.org/role_type#role> "actress".
+  FILTER regex(?n_name, "An").
+  FILTER (?t_production_year > 2010) .
+  FILTER (regex(?mi_info, "Japan:.*201") || regex(?mi_info, "USA:.*201")) .
+
+}

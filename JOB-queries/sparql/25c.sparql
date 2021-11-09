@@ -1,0 +1,45 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(head writer)" "(writer)" "(written by)" "(story)" "(story editor)"
+  }
+  VALUES ?k_keyword {
+    "hospital" "murder" "violence" "blood" "gore" "death" "female-nudity"
+  }
+  VALUES ?mi_info {
+    "War" "Horror" "Action" "Sci-Fi" "Thriller" "Crime"
+  }
+
+  # Join clauses
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?midx <http://imdb.org/movie_info_idx#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note.
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info .
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "genres".
+  ?it2 <http://imdb.org/info_type#info> "votes".
+  ?n <http://imdb.org/name__t#gender> "m".
+
+}

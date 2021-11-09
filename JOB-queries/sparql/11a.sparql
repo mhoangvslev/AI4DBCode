@@ -1,0 +1,33 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt.
+  ?ml <http://imdb.org/movie_link#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t.
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k.
+  ?mc <http://imdb.org/movie_companies#movie_id> ?t.
+  ?mc <http://imdb.org/movie_companies#company_type_id> ?ct.
+  ?mc <http://imdb.org/movie_companies#company_id> ?c.
+
+  # Shortcuts
+  ?mk <http://imdb.org/movie_keyword#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_link#movie_id#movie_id> ?ml.
+  ?mc <http://imdb.org/movie_companies#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?c <http://imdb.org/company_name#name> ?c_name .
+  ?c <http://imdb.org/company_name#country_code> ?c_country_code .
+  ?lt <http://imdb.org/link_type#link> ?lt_link .
+  ?t <http://imdb.org/title_t#title> ?t_title .
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?ct <http://imdb.org/company_type#kind>	"production companies".
+  ?k <http://imdb.org/keyword#keyword> "sequel".
+  FILTER (?c_country_code != "[pl]").
+  FILTER (regex(?c_name, "Film") || regex(?c_name, "Warner")).
+  FILTER regex(?lt_link, "follow").
+  FILTER (?t_production_year >= 1950 && ?t_production_year <= 2000).
+  # FILTER NOT EXISTS { ?mc <http://imdb.org/movie_companies#note> ?mc_note } .
+
+}

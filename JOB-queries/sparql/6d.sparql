@@ -1,0 +1,28 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?k_keyword {
+    "superhero" "sequel" "second-part" "marvel-comics"
+    "based-on-comic" "tv-special" "fight" "violence"
+  }
+
+  # Join clauses
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n .
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?n <http://imdb.org/name__t#name> ?n_name.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+
+  # Filter clauses
+  FILTER regex(?n_name, "Downey.*Robert") .
+  FILTER (?t_production_year > 2000) .
+
+}

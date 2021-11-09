@@ -1,0 +1,52 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?ci_note {
+    "(head writer)" "(writer)" "(written by)" "(story)" "(story editor)"
+  }
+  VALUES ?k_keyword {
+    "hospital" "murder" "violence" "blood" "gore" "death" "female-nudity"
+  }
+  VALUES ?mi_info {
+    "War" "Horror" "Thriller" "Action" "Sci-Fi" "Crime"
+  }
+
+  # Join clauses
+  ?mi <http://imdb.org/movie_info#info_type_id> ?it1.
+  ?mi <http://imdb.org/movie_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?midx <http://imdb.org/movie_info_idx#movie_id> ?t.
+  ?midx <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?cc <http://imdb.org/complete_cast#subject_id> ?cct1.
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct2.
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#movie_info#movie_id#movie_id> ?mi.
+  ?ci <http://imdb.org/cast_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?ci <http://imdb.org/cast_info#complete_cast#movie_id#movie_id> ?cc.
+  ?mi <http://imdb.org/movie_info#movie_info_idx#movie_id#movie_id> ?midx.
+  ?mi <http://imdb.org/movie_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?cc <http://imdb.org/complete_cast#movie_info_idx#movie_id#movie_id> ?midx.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?ci <http://imdb.org/cast_info#note> ?ci_note .
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?mi <http://imdb.org/movie_info#info> ?mi_info.
+  ?midx <http://imdb.org/movie_info_idx#info> ?midx_info.
+  ?n <http://imdb.org/name__t#name> ?n_name .
+  ?t <http://imdb.org/title_t#title> ?t_title.
+
+  # Filter clauses
+  ?it1 <http://imdb.org/info_type#info> "genres".
+  ?it2 <http://imdb.org/info_type#info> "votes".
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "cast".
+  ?cct2 <http://imdb.org/comp_cast_type#kind> "complete+verified".
+  ?n <http://imdb.org/name__t#gender> "m".
+
+}

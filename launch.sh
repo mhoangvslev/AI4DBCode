@@ -21,10 +21,16 @@ elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
         -e RTOS_DB_NAME="imdbload" \
         -e RTOS_DB_HOST="0.0.0.0" \
         -e RTOS_DB_PORT="5432" \
+        -e RTOS_ISQL_ENDPOINT="sparql" \
+        -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
+        -e RTOS_ISQL_HOST="localhost" \
+        -e RTOS_ISQL_PORT="8890" \
+        -e VIRTUOSO_HOME="/virtuoso-opensource/" \
         --network host \
         -v $(realpath ./models):/workplace/models \
+        -v /virtuoso-opensource:/virtuoso-opensource \
         -p '5432:5432' \
-        ai4dbcode_rtos
+        ai4dbcode-rtos_rtos
 elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
     docker run -it --rm \
         --gpus all \
@@ -38,14 +44,19 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         -e RTOS_DB_NAME="imdbload" \
         -e RTOS_DB_HOST="0.0.0.0" \
         -e RTOS_DB_PORT="5432" \
+        -e RTOS_ISQL_ENDPOINT="sparql" \
+        -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
+        -e RTOS_ISQL_HOST="localhost" \
+        -e RTOS_ISQL_PORT="8890" \
+        -e VIRTUOSO_HOME="/virtuoso-opensource/" \
         --network host \
         -v $(realpath ./models):/workplace/models \
+        -v /virtuoso-opensource:/virtuoso-opensource \
         -p '5432:5432' \
-        ai4dbcode_rtos
+        ai4dbcode-rtos_rtos
 elif [ "$1" = build ]; then
     if [ "$2" = "postgres" -o "$2" = "rtos-cpu" -o "$2" = "rtos-gpu" ]; then
-        target=$( echo "$2" | egrep -o '^[a-z0-9]+')
-        docker-compose build $target
+        docker-compose build $( echo "$2" | egrep -o '^[a-z0-9]+')
     else
         echo "Cannot build unknown target $2";
         exit 1;

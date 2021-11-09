@@ -1,0 +1,18 @@
+SELECT * WHERE {
+
+  # Join clauses
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t1 .
+  ?ml <http://imdb.org/movie_link#movie_id> ?t1 .
+  ?ml <http://imdb.org/movie_link#linked_movie_id> ?t2 .
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt .
+
+  # Attribute selection clauses
+  ?lt <http://imdb.org/link_type#link> ?lt_link .
+  ?t1 <http://imdb.org/title_t#title> ?t1_title .
+  ?t2 <http://imdb.org/title_t#title> ?t2_title .
+
+  # Filter clauses
+  ?k <http://imdb.org/keyword#keyword> "character-name-in-title" .
+
+}

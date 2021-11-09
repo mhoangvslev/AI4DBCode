@@ -1,0 +1,42 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?k_keyword {
+    "second-part" "superhero" "sequel" "marvel-comics"
+    "based-on-comic" "tv-special" "fight" "violence"
+  }
+
+  # Join clauses
+  ?t <http://imdb.org/title_t#kind_id> ?kt.
+  ?mk <http://imdb.org/movie_keyword#movie_id> ?t .
+  ?mk <http://imdb.org/movie_keyword#keyword_id> ?k .
+  ?cc <http://imdb.org/complete_cast#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#movie_id> ?t .
+  ?ci <http://imdb.org/cast_info#person_role_id> ?chn.
+  ?ci <http://imdb.org/cast_info#person_id> ?n.
+  ?cc <http://imdb.org/complete_cast#subject_id> ?cct1.
+  ?cc <http://imdb.org/complete_cast#status_id> ?cct2.
+
+  # Shortcuts
+  ?ci <http://imdb.org/cast_info#complete_cast#movie_id#movie_id> ?cc.
+  ?ci <http://imdb.org/cast_info#movie_keyword#movie_id#movie_id> ?mk.
+  ?cc <http://imdb.org/complete_cast#movie_keyword#movie_id#movie_id> ?mk.
+
+  # Attribute selection clauses
+  ?cct2 <http://imdb.org/comp_cast_type#kind> ?cct2_kind.
+  ?chn <http://imdb.org/char_name#name> ?chn_name .
+  ?k <http://imdb.org/keyword#keyword> ?k_keyword.
+  ?n <http://imdb.org/name__t#name> ?n_name.
+  ?t <http://imdb.org/title_t#title> ?t_title.
+  ?t <http://imdb.org/title_t#production_year> ?t_production_year.
+
+  # Filter clauses
+  ?cct1 <http://imdb.org/comp_cast_type#kind> "cast".
+  ?kt <http://imdb.org/kind_type#kind> "movie".
+  FILTER regex(?cct2_kind, "complete").
+  FILTER (!regex(?chn_name, "Sherlock")).
+  FILTER (regex(?chn_name, "Tony.*Stark") || regex(?chn_name, "Iron.*Man")).
+  FILTER (?t_production_year > 2000).
+  FILTER regex(?n_name, "Downey.*Robert").
+
+}

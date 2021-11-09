@@ -1,0 +1,50 @@
+SELECT * WHERE {
+
+  # Value clauses
+  VALUES ?lt_link {
+    "sequel" "follows" "followed by"
+  }
+
+  # Join clauses
+  ?ml <http://imdb.org/movie_link#link_type_id> ?lt.
+  ?ml <http://imdb.org/movie_link#movie_id> ?t1.
+  ?ml <http://imdb.org/movie_link#linked_movie_id> ?t2.
+  ?midx1 <http://imdb.org/movie_info_idx#info_type_id> ?it1.
+  ?midx1 <http://imdb.org/movie_info_idx#movie_id> ?t1.
+  ?midx2 <http://imdb.org/movie_info_idx#info_type_id> ?it2.
+  ?midx2 <http://imdb.org/movie_info_idx#movie_id> ?t2.
+  ?mc1 <http://imdb.org/movie_companies#company_id> ?c1.
+  ?mc1 <http://imdb.org/movie_companies#movie_id> ?t1.
+  ?mc2 <http://imdb.org/movie_companies#company_id> ?c2.
+  ?mc2 <http://imdb.org/movie_companies#movie_id> ?t2.
+  ?t1 <http://imdb.org/title_t#kind_id> ?kt1.
+  ?t2 <http://imdb.org/title_t#kind_id> ?kt2.
+
+  # Shortcuts
+  ?midx1 <http://imdb.org/movie_info_idx#movie_link#movie_id#movie_id> ?ml.
+  ?midx2 <http://imdb.org/movie_info_idx#movie_link#movie_id#linked_movie_id> ?ml.
+  ?mc1 <http://imdb.org/movie_companies#movie_link#movie_id#movie_id> ?ml.
+  ?mc1 <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx1.
+  ?mc2 <http://imdb.org/movie_companies#movie_link#movie_id#linked_movie_id> ?ml.
+  ?mc2 <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx2.
+
+  # Attribute selection clauses
+  ?c1 <http://imdb.org/company_name#name> ?c1_name.
+  ?c2 <http://imdb.org/company_name#name> ?c2_name.
+  ?t1 <http://imdb.org/title_t#title> ?t1_title.
+  ?t2 <http://imdb.org/title_t#title> ?t2_title.
+  ?t2 <http://imdb.org/title_t#production_year> ?t2_production_year .
+  ?midx1 <http://imdb.org/movie_info_idx#info> ?midx1_info.
+  ?midx2 <http://imdb.org/movie_info_idx#info> ?midx2_info .
+  ?lt <http://imdb.org/link_type#link> ?lt_link.
+
+  # Filter clauses
+  ?c1 <http://imdb.org/company_name#country_code> "[us]".
+  ?it1 <http://imdb.org/info_type#info> "rating".
+  ?it2 <http://imdb.org/info_type#info> "rating".
+  ?kt1 <http://imdb.org/kind_type#kind> "tv series".
+  ?kt2 <http://imdb.org/kind_type#kind> "tv series".
+  FILTER (str(?midx2_info) < str("3.0")) .
+  FILTER (?t2_production_year >= 2005 && ?t2_production_year <= 2008).
+
+}
