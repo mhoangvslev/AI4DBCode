@@ -10,7 +10,7 @@ if [ "$1" = "start" -a "$2" = "postgres" ]; then
         docker exec -i postgres pg_restore -U postgres -x --no-privileges --no-owner -Fc -d imdbload < $4;
     else
         echo "Unknown command $3";
-        exit -1;
+        exit 1;
     fi
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
@@ -22,6 +22,7 @@ elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
         -e RTOS_DB_HOST="0.0.0.0" \
         -e RTOS_DB_PORT="5432" \
         --network host \
+        -v $(realpath ./models):/workplace/models \
         -p '5432:5432' \
         ai4dbcode_rtos
 elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
@@ -38,14 +39,16 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         -e RTOS_DB_HOST="0.0.0.0" \
         -e RTOS_DB_PORT="5432" \
         --network host \
+        -v $(realpath ./models):/workplace/models \
         -p '5432:5432' \
         ai4dbcode_rtos
 elif [ "$1" = build ]; then
     if [ "$2" = "postgres" -o "$2" = "rtos-cpu" -o "$2" = "rtos-gpu" ]; then
-        docker-compose build $( echo "$2" | egrep -o '^[a-z0-9]+')
+        target=$( echo "$2" | egrep -o '^[a-z0-9]+')
+        docker-compose build $target
     else
         echo "Cannot build unknown target $2";
-        exit -1;
+        exit 1;
     fi
 else
     syntax_error;

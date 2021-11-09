@@ -35,7 +35,7 @@ for name, param in policy_net.named_parameters():
     else:
         init.uniform(param)
 
-# policy_net.load_state_dict(torch.load("JOB_tc.pth"))#load cost train model
+# policy_net.load_state_dict(torch.load("models/JOB_tc.pth"))#load cost train model
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
