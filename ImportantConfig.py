@@ -1,7 +1,7 @@
 import os
 
 class Config:
-    def __init__(self,):
+    def __init__(self):
         self.sytheticDir = "Queries/sytheic"
         self.JOBDir = os.environ["RTOS_JOB_DIR"]
         self.schemaFile = os.environ["RTOS_SCHEMA_FILE"]

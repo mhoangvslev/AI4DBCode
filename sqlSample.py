@@ -239,7 +239,6 @@ class JoinTree:
                 return fold.add('childrenNode',left_h, left_c, right_h, right_c,inputX).split(2)
             else:
                 return fold.add('leaf',self.db_info.name2idx[self.aliasname2fullname[node]],self.table_fea_set[node]).split(2)
-            return None
         encoding, _ = encode_node(node_idx)
         return encoding
     def toSql(self,):

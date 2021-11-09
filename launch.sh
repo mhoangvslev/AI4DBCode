@@ -7,7 +7,7 @@ syntax_error(){
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
     if [ "$3" = "init" ]; then
-        docker exec -i postgres -Fc pg_restore -U postgres -x --no-privileges --no-owner -d imdbload < $4;
+        docker exec -i postgres pg_restore -U postgres -x --no-privileges --no-owner -Fc -d imdbload < $4;
     else
         echo "Unknown command $3";
         exit -1;
@@ -23,7 +23,7 @@ elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
         -e RTOS_DB_PORT="5432" \
         --network host \
         -p '5432:5432' \
-        jos_rtos-cpu
+        ai4dbcode_rtos-cpu
 elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
     docker run -it --rm \
         --gpus all \
@@ -39,7 +39,7 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         -e RTOS_DB_PORT="5433" \
         --network postgresNetwork \
         -p '5433:5432' \
-        jos_rtos-gpu
+        ai4dbcode_rtos-cpu
 elif [ "$1" = build ]; then
     if [ "$2" = "postgres" -o "$2" = "rtos-cpu" -o "$2" = "rtos-gpu" ]; then
         docker-compose build $2

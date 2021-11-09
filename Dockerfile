@@ -19,11 +19,10 @@ RUN wget \
 
 RUN conda create -n xp
 SHELL ["conda", "run", "--no-capture-output", "-n", "xp", "/bin/bash", "-c"]
-RUN conda install python=3.7.2 \
+RUN conda install python=3.7 \
     && conda init bash \
     && echo "conda activate xp" >> ~/.bashrc
 
 COPY . /root/JOS/
 WORKDIR /root/JOS/
-
 RUN pip install -r requirements.txt

@@ -33,7 +33,7 @@ Here we have listed the most important parameters you need to configure to run R
 - psqlparse
 
 # Run the JOB 
-1. Follow the https://github.com/gregrahn/join-order-benchmark to configure the database
+1. Follow the https://github.com/GDD-Nantes/jobrdf to configure the database or download [the dump file](https://jeanbraye.freeboxos.fr:2753/share/zAt-rgPHE6K8nI8S/imdb_pg11) for the database.
 2. Add JOB queries in JOBDir.
 3. Add sythetic queries in sytheticDir, more sythetic queries will help RTOS generate better results. E.g. You can generate queries by using templates.
 4. Cost Training, It will store the model which optimize on cost in PostgreSQL
@@ -44,6 +44,32 @@ Here we have listed the most important parameters you need to configure to run R
 	
 		python3 LatencyTuning.py 
 
+# Docker
+An convenient script is available to make things easier:
+```bash
+sh launch.sh start|build postgres|rtos-cpu|rtos-gpu
+
+# Once inside rtos-cpu  or rtos gpu, launch the commands from previous section
+```
+
+1. Create a Postgres container
+
+```bash
+sh launch.sh build postgres # Build postgres container
+sh launch.sh start postgres # Launch it in background
+wget https://jeanbraye.freeboxos.fr:2753/share/zAt-rgPHE6K8nI8S/imdb_pg11 -O imdb_pg11 # Download the dump
+sh launch.sh start postgres init path/to/imdb_pg11 #Load the dump into base
+```
+
+1. Create a RTOS container
+
+```bash
+sh launch.sh build rtos-cpu|gpu # Build rtos container
+sh launch.sh start rtos-cpu|gpu # Launch it in background
+
+python CostTraining.py
+python LatencyTuning.py
+```
 
 # Questions
 Contact Xiang Yu (x-yu17@mails.tsinghua.edu.cn) if you have any questions.

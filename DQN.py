@@ -3,7 +3,7 @@ import math
 import random
 import torchfold
 import torch.nn.functional as F
-import torchvision.transforms as T
+#import torchvision.transforms as T
 import torch
 from collections import namedtuple
 from sqlSample import JoinTree
@@ -189,7 +189,8 @@ class DQN:
         next_value_list = []
         if (len(samples)==0):
             return
-        fold = torchfold.Fold(cuda=True)
+        
+        fold = torchfold.Fold(cuda=(str(self.device) == "cuda"))
         nowL = []
         for one_sample in samples:
             nowList = one_sample.env.selectValueFold(fold)

@@ -41,7 +41,7 @@ target_net.eval()
 
 pgrunner = PGRunner(config.dbName,config.userName,config.password,config.ip,config.port,isCostTraining=True,latencyRecord = False,latencyRecordFile = "Cost.json")
 
-DQN = DQN(policy_net,target_net,db_info,pgrunner,device)
+dqn = DQN(policy_net,target_net,db_info,pgrunner,device)
 
 def k_fold(input_list,k,ix = 0):
     li = len(input_list)
@@ -87,7 +87,7 @@ def resample_sql(sql_list):
         env = ENV(sql,db_info,pgrunner,device)
 
         for t in count():
-            action_list, chosen_action,all_action = DQN.select_action(env,need_random=False)
+            action_list, chosen_action,all_action = dqn.select_action(env,need_random=False)
 
             left = chosen_action[0]
             right = chosen_action[1]
@@ -135,7 +135,7 @@ def train(trainSet,validateSet):
         acBest = (not nr) and random.random()>0.7
         for t in count():
             # beginTime = time.time();
-            action_list, chosen_action,all_action = DQN.select_action(env,need_random=nr)
+            action_list, chosen_action,all_action = dqn.select_action(env,need_random=nr)
             value_now = env.selectValue(policy_net)
             next_value = torch.min(action_list).detach()
             # e1Time = time.time()
@@ -167,28 +167,28 @@ def train(trainSet,validateSet):
                 #             for idx in range(t-cnt+1):
                 global tree_lstm_memory
                 tree_lstm_memory = {}
-                DQN.Memory.push(env,expected_state_action_values,final_state_value)
+                dqn.Memory.push(env,expected_state_action_values,final_state_value)
                 for pair_s_v in previous_state_list[:0:-1]:
                     cnt += 1
                     if expected_state_action_values > pair_s_v[1]:
                         expected_state_action_values = pair_s_v[1]
                     #                 for idx in range(cnt):
                     expected_state_action_values = expected_state_action_values
-                    DQN.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
+                    dqn.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
                 #                 break
                 loss = 0
 
             if done:
                 # break
-                loss = DQN.optimize_model()
-                # loss = DQN.optimize_model()
-                # loss = DQN.optimize_model()
-                # loss = DQN.optimize_model()
+                loss = dqn.optimize_model()
+                # loss = dqn.optimize_model()
+                # loss = dqn.optimize_model()
+                # loss = dqn.optimize_model()
                 losses.append(loss)
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
                     print("######################Epoch",i_episode//print_every,pg_cost)
-                    val_value = DQN.validate(validateSet)
+                    val_value = dqn.validate(validateSet)
                     print("time",time.time()-startTime)
                     print("~~~~~~~~~~~~~~")
                 break

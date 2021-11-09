@@ -22,9 +22,12 @@ class PGRunner:
         :param latencyRecord:-1:loadFromFile
         :param latencyRecordFile:
         """
-        self.con = psycopg2.connect(database=dbname, user=user,
-                               password=password, host=host, port=port)
-        self.cur = self.con.cursor()
+
+        self._dbname = dbname
+        self._user = user
+        self._password = password
+        self._host = host
+        self._port = port
         self.config = PGConfig()
         self.isLatencyRecord = latencyRecord
         # self.LatencyRecordFileHandle = None
@@ -64,23 +67,31 @@ class PGRunner:
         if self.isLatencyRecord:
             if sqlwithplan in LatencyDict:
                 return LatencyDict[sqlwithplan]
+        conn = psycopg2.connect(
+            database=self._dbname, 
+            user=self._user, 
+            password=self._password, 
+            host=self._host, 
+            port=self._port
+        )
+        cursor = conn.cursor()
 
-        self.cur.execute("set join_collapse_limit = 1;")
-        self.cur.execute("SET statement_timeout = "+str(int(sql.timeout()))+ ";")
-        self.cur.execute("set max_parallel_workers=1;")
-        self.cur.execute("set max_parallel_workers_per_gather = 1;")
-        self.cur.execute("set geqo_threshold = 20;")
-        self.cur.execute("EXPLAIN "+sqlwithplan)
+        cursor.execute("set join_collapse_limit = 1;")
+        cursor.execute("SET statement_timeout = "+str(int(sql.timeout()))+ ";")
+        cursor.execute("set max_parallel_workers=1;")
+        cursor.execute("set max_parallel_workers_per_gather = 1;")
+        cursor.execute("set geqo_threshold = 20;")
+        cursor.execute("EXPLAIN "+sqlwithplan)
         thisQueryCost = self.getCost(sql,sqlwithplan)
         if thisQueryCost / sql.getDPCost()<100:
             try:
-                self.cur.execute("EXPLAIN ANALYZE "+sqlwithplan)
-                rows = self.cur.fetchall()
+                cursor.execute("EXPLAIN ANALYZE "+sqlwithplan)
+                rows = cursor.fetchall()
                 row = rows[0][0]
                 afterCost = float(rows[0][0].split("actual time=")[1].split("..")[1].split(" ")[
                                       0])
             except:
-                self.con.commit()
+                conn.commit()
                 afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlantecy(),sql.timeout())
         else:
             afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlantecy(),sql.timeout())
@@ -96,18 +107,28 @@ class PGRunner:
         :param sql: a sqlSample object
         :return: the cost of sql
         """
-        self.cur.execute("set join_collapse_limit = 1;")
-        self.cur.execute("set max_parallel_workers=1;")
-        self.cur.execute("set max_parallel_workers_per_gather = 1;")
-        self.cur.execute("set geqo_threshold = 20;")
-        self.cur.execute("SET statement_timeout =  100000;")
 
-        self.cur.execute("EXPLAIN "+sqlwithplan)
-        rows = self.cur.fetchall()
+        conn = psycopg2.connect(
+            database=self._dbname, 
+            user=self._user, 
+            password=self._password, 
+            host=self._host, 
+            port=self._port
+        )
+        cursor = conn.cursor()
+
+        cursor.execute("set join_collapse_limit = 1;")
+        cursor.execute("set max_parallel_workers=1;")
+        cursor.execute("set max_parallel_workers_per_gather = 1;")
+        cursor.execute("set geqo_threshold = 20;")
+        cursor.execute("SET statement_timeout =  100000;")
+
+        cursor.execute("EXPLAIN "+sqlwithplan)
+        rows = cursor.fetchall()
         row = rows[0][0]
         afterCost = float(rows[0][0].split("cost=")[1].split("..")[1].split(" ")[
                               0])
-        self.con.commit()
+        conn.commit()
         return afterCost
 
     def getDPPlanTime(self,sql,sqlwithplan):
@@ -124,20 +145,30 @@ class PGRunner:
         global selectivityDict
         if whereCondition in selectivityDict:
             return selectivityDict[whereCondition]
-        self.cur.execute("SET statement_timeout = "+str(int(100000))+ ";")
+
+        conn = psycopg2.connect(
+            database=self._dbname, 
+            user=self._user, 
+            password=self._password, 
+            host=self._host, 
+            port=self._port
+        )
+        cursor = conn.cursor()
+        
+        cursor.execute("SET statement_timeout = "+str(int(100000))+ ";")
         totalQuery = "select * from "+table+";"
         #     print(totalQuery)
 
-        self.cur.execute("EXPLAIN "+totalQuery)
-        rows = self.cur.fetchall()[0][0]
+        cursor.execute("EXPLAIN "+totalQuery)
+        rows = cursor.fetchall()[0][0]
         #     print(rows)
         #     print(rows)
         total_rows = int(rows.split("rows=")[-1].split(" ")[0])
 
         resQuery = "select * from "+table+" Where "+whereCondition+";"
         # print(resQuery)
-        self.cur.execute("EXPLAIN  "+resQuery)
-        rows = self.cur.fetchall()[0][0]
+        cursor.execute("EXPLAIN  "+resQuery)
+        rows = cursor.fetchall()[0][0]
         #     print(rows)
         select_rows = int(rows.split("rows=")[-1].split(" ")[0])
         selectivityDict[whereCondition] = -log(select_rows/total_rows)
