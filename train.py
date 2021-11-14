@@ -83,7 +83,7 @@ def QueryLoader(QueryDir):
         L = []
         for root, dirs, files in os.walk(file_dir):
             for file in files:
-                if os.path.splitext(file)[1] == '.sql':
+                if os.path.splitext(file)[1] in ['.sql', '.sparql']:
                     L.append(os.path.join(root, file))
         return L
     files = file_name(QueryDir)
@@ -102,7 +102,7 @@ def resample_sql(sql_list):
     mes = 0
     for sql in sql_list:
         #         sql = val_list[i_episode%len(train_list)]
-        pg_cost = sql.getDPlantecy()
+        pg_cost = sql.getDPlatency()
         #         continue
         env = ENV(sql,db_info,runner,device)
 
@@ -145,7 +145,7 @@ def train(trainSet,validateSet):
             trainSet = resample_sql(trainSet_temp)
         #     sql = random.sample(train_list_back,1)[0][0]
         sqlt = random.sample(trainSet[0:],1)[0]
-        pg_cost = sqlt.getDPlantecy()
+        pg_cost = sqlt.getDPlatency()
         env = ENV(sqlt,db_info,runner,device)
 
         previous_state_list = []
@@ -207,7 +207,7 @@ def train(trainSet,validateSet):
                 losses.append(loss)
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
-                    print("######################Epoch",i_episode//print_every,pg_cost)
+                    print("###################### Epoch",i_episode//print_every,pg_cost)
                     val_value = dqn.validate(validateSet)
                     print("time",time.time()-startTime)
                     print("~~~~~~~~~~~~~~")
@@ -218,7 +218,7 @@ def train(trainSet,validateSet):
 if __name__=='__main__':
     sytheticQueries = QueryLoader(QueryDir=config.sytheticDir)
     # print(sytheticQueries)
-    JOBQueries = QueryLoader(QueryDir=config.JOBDir)
+    JOBQueries = QueryLoader(QueryDir=f'{config.JOBDir}/{os.environ["RTOS_ENGINE"]}')
     Q4,Q1 = k_fold(JOBQueries,10,1)
     # print(Q4,Q1)
     train(Q4+sytheticQueries,Q1)

@@ -14,6 +14,7 @@ import torch
 from torch.nn import init
 from ImportantConfig import Config
 import os
+from tqdm import tqdm
 
 config = Config()
 
@@ -70,7 +71,7 @@ def k_fold(input_list,k,ix = 0):
     kl = (li-1)//k + 1
     train = []
     validate = []
-    for idx in range(li):
+    for idx in tqdm(range(li)):
 
         if idx%k == ix:
             validate.append(input_list[idx])
@@ -83,14 +84,14 @@ def QueryLoader(QueryDir):
     def file_name(file_dir):
         import os
         L = []
-        for root, dirs, files in os.walk(file_dir):
-            for file in files:
-                if os.path.splitext(file)[1] == '.sql':
+        for root, dirs, files in tqdm(os.walk(file_dir)):
+            for file in tqdm(files):
+                if os.path.splitext(file)[1] in ['.sql', '.sparql']:
                     L.append(os.path.join(root, file))
         return L
     files = file_name(QueryDir)
     sql_list = []
-    for filename in files:
+    for filename in tqdm(files):
         with open(filename, "r") as f:
             data = f.readlines()
             one_sql = "".join(data)
@@ -102,14 +103,14 @@ def resample_sql(sql_list):
     reward_sum = 0
     rewardsP = []
     mes = 0
-    for sql in sql_list:
+    for sql in tqdm(sql_list):
         #         sql = val_list[i_episode%len(train_list)]
-        pg_cost = sql.getDPlantecy()
+        pg_cost = sql.getDPlatency()
         #         continue
         env = ENV(sql,db_info,runner,device)
 
         for t in count():
-            action_list, chosen_action,all_action = dqn.select_action(env,need_random=False)
+            action_list, chosen_action, all_action = dqn.select_action(env,need_random=False)
 
             left = chosen_action[0]
             right = chosen_action[1]
@@ -142,20 +143,21 @@ def train(trainSet,validateSet):
     startTime = time.time()
     print_every = 20
     TARGET_UPDATE = 3
-    for i_episode in range(0,10000):
+    for i_episode in tqdm(range(0,10000), unit="episode"):
         if i_episode % 200 == 100:
+            print("Resampling training set...")
             trainSet = resample_sql(trainSet_temp)
         #     sql = random.sample(train_list_back,1)[0][0]
         sqlt = random.sample(trainSet[0:],1)[0]
-        pg_cost = sqlt.getDPlantecy()
         env = ENV(sqlt,db_info,runner,device)
+        pg_cost = sqlt.getDPlatency()
 
         previous_state_list = []
         action_this_epi = []
         nr = True
         nr = random.random()>0.3 or sqlt.getBestOrder()==None
         acBest = (not nr) and random.random()>0.7
-        for t in count():
+        for t in tqdm(count()):
             # beginTime = time.time();
             action_list, chosen_action,all_action = dqn.select_action(env,need_random=nr)
             value_now = env.selectValue(policy_net)
@@ -209,7 +211,7 @@ def train(trainSet,validateSet):
                 losses.append(loss)
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
-                    print("######################Epoch",i_episode//print_every,pg_cost)
+                    print("###################### Epoch",i_episode//print_every,pg_cost)
                     val_value = dqn.validate(validateSet)
                     print("time",time.time()-startTime)
                     print("~~~~~~~~~~~~~~")
@@ -220,9 +222,16 @@ def train(trainSet,validateSet):
     # policy_net = policy_net.cuda()
 
 if __name__=='__main__':
+    print("Loading synthetic queries...")
     sytheticQueries = QueryLoader(QueryDir=config.sytheticDir)
-    # print(sytheticQueries)
+    
+    print("Loading JOB queries...")
+    #JOBQueries = QueryLoader(QueryDir=f'{config.JOBDir}/{os.environ["RTOS_ENGINE"]}')
     JOBQueries = QueryLoader(QueryDir=config.JOBDir)
+
+    print("Splitting into folds...")
     Q4,Q1 = k_fold(JOBQueries,10,1)
     # print(Q4,Q1)
+
+    print("Start training...")
     train(Q4+sytheticQueries,Q1)

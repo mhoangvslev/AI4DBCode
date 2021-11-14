@@ -6,6 +6,8 @@ import torch.nn.functional as F
 #import torchvision.transforms as T
 import torch
 from collections import namedtuple
+
+from tqdm import tqdm
 from utils.sqlSample import JoinTree
 import torch.optim as optim
 import numpy as np
@@ -60,7 +62,7 @@ class ENV(object):
         return self.sql.sql+self.hashs
     def allAction(self,model):
         action_value_list = []
-        for one_join in self.sel.join_candidate:
+        for one_join in tqdm(self.sel.join_candidate, desc="Inspecting actions", unit="action"):
             l_fa = self.sel.findFather(one_join[0])
             r_fa  =self.sel.findFather(one_join[1])
             if self.planSpace ==0:
@@ -161,7 +163,7 @@ class DQN:
         prt = []
         mes = 0
         for sql in val_list:
-            pg_cost = sql.getDPlantecy()
+            pg_cost = sql.getDPlatency()
             env = ENV(sql,self.db_info,self.pgrunner,self.device)
 
             for t in count():

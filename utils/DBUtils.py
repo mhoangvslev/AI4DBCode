@@ -6,6 +6,7 @@ import subprocess
 import re
 import logging
 import time
+import os
 
 from math import log
 from SPARQLWrapper import SPARQLWrapper, JSON
@@ -96,7 +97,7 @@ class PGRunner(DBRunner):
         :param sql:a sqlSample object
         :return: the latency of sql
         """
-        # query = sql.toSql()
+        # query = sql.toSql(os.environ["RTOS_ENGINE"])
         if self.isCostTraining:
             return self.getCost(sql,sqlwithplan)
         global LatencyDict
@@ -124,13 +125,12 @@ class PGRunner(DBRunner):
                 cursor.execute("EXPLAIN ANALYZE "+sqlwithplan)
                 rows = cursor.fetchall()
                 row = rows[0][0]
-                afterCost = float(rows[0][0].split("actual time=")[1].split("..")[1].split(" ")[
-                                      0])
+                afterCost = float(rows[0][0].split("actual time=")[1].split("..")[1].split(" ")[0])
             except:
                 conn.commit()
-                afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlantecy(),sql.timeout())
+                afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
         else:
-            afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlantecy(),sql.timeout())
+            afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
         afterCost += 5
         if self.isLatencyRecord:
             LatencyDict[sqlwithplan] =  afterCost
@@ -138,6 +138,7 @@ class PGRunner(DBRunner):
             LatencyRecordFileHandle.write(json.dumps([sqlwithplan,afterCost])+"\n")
             LatencyRecordFileHandle.flush()
         return afterCost
+
     def getCost(self,sql,sqlwithplan):
         """
         :param sql: a sqlSample object
@@ -282,13 +283,23 @@ class ISQLRunner(DBRunner):
             #logging.error(error)
             print(error)
 
-    def _explain(self, query: str, force_order: bool = False):
+    def _explain(self, query: str, force_order: bool = False, mode=-7):
+        """[summary]
+
+        Args:
+            query (str): [description]
+            force_order (bool, optional): [description]. Defaults to False.
+            mode (int, optional): http://docs.openlinksw.com/virtuoso/fn_explain/. Defaults to -7.
+
+        Returns:
+            [type]: [description]
+        """
         if force_order:
             query = self.__insert_force_order_pragma__(query)
         query = self.__insert_from_named_graph_clause__(query, self._graph)
         query = self.__remove_comments__(query)
         query = self.__format_regex__(query)
-        cmd = f"select explain('sparql {query}', -7);"
+        cmd = f"select explain('sparql {query}', {mode});"
         return self._isql.execute_cmd(cmd)
 
     
@@ -297,10 +308,25 @@ class ISQLRunner(DBRunner):
         return float(response.split('\n')[9])
             
     def getLatency(self, sql, sqlwithplan):
-        start_time = time.time()
-        self._execute_query(sqlwithplan, force_order=True)
-        end_time = time.time()
-        return end_time - start_time
+        thisQueryCost = self.getCost(sql,sqlwithplan)
+        if thisQueryCost / sql.getDPCost() < 100:
+            try:
+                start_time = time.time()
+                self._execute_query(sqlwithplan, force_order=True)
+                end_time = time.time()
+                afterCost = end_time - start_time
+            except: 
+                pass
+                #afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
+        
+        afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
+        afterCost += 5
+        if self.isLatencyRecord:
+            LatencyDict[sqlwithplan] =  afterCost
+            global LatencyRecordFileHandle
+            LatencyRecordFileHandle.write(json.dumps([sqlwithplan,afterCost])+"\n")
+            LatencyRecordFileHandle.flush()
+        return afterCost
 
     def getCost(self, sql, sqlwithplan):
         return self._query_cost(sqlwithplan, force_order=True)
@@ -310,11 +336,12 @@ class ISQLRunner(DBRunner):
         if whereCondition in selectivityDict:
             return selectivityDict[whereCondition]
 
-        totalQuery = f'select * WHERE {{ ?s {table} ?p }};'
-        total_rows = int(re.search(r'RDF_QUAD_POGS\s+([0-9]+)\srows', self._explain(totalQuery)).group(1))
+        totalQuery = f'SELECT * WHERE {{ {table} }}'
+        #print(self._explain(totalQuery, mode=-1))
+        total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(totalQuery, mode=-1)).group(1))
 
-        resQuery = f'select * WHERE {{ ?s {table} ?{whereCondition} }};'
-        select_rows = int(re.search(r'RDF_QUAD_POGS\s+([0-9]+)\srows', self._explain(resQuery)).group(1))
+        resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
+        select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(resQuery, mode=-1)).group(1))
 
         selectivityDict[whereCondition] = -log(select_rows/total_rows)
         return selectivityDict[whereCondition]

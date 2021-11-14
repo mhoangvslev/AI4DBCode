@@ -5,8 +5,10 @@ ENV https_proxy=${HTTPS_PROXY}
 ENV all_proxy=${HTTP_PROXY}
 
 RUN apt-get update \
-    && apt-get install -y wget curl git build-essential
+    && apt-get install -y wget curl git build-essential \
+    && pip install poetry==1.1.8
 
 COPY . /workspace
 WORKDIR /workspace
+#RUN poetry install
 RUN pip install -r requirements.txt

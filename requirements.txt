@@ -1,6 +1,7 @@
-torchfold
 psqlparse==1.0rc7
-psycopg2-binary
-torch
+psycopg2-binary==2.8.6
 git+https://github.com/mhoangvslev/torchfold.git@master
+git+https://github.com/sage-org/sage-engine.git@rl-xp
 SPARQLWrapper==1.8.5
+pyparsing==2.4.7
+tqdm==4.62.3

@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "AI4DBCode-RTOS"
+version = "1.0.0"
+description = ""
+authors = []
+
+[tool.poetry.dependencies]
+python = "3.7.11"
+numpy = "1.19.5"
+SPARQLWrapper = "1.8.5"
+tensorforce = { version = "0.6.4", extras = ["tune"] }
+rdflib = { git = "https://github.com/JulienDavat/rdflib.git", branch = "rl-xp" }
+sage-engine = { git = "https://github.com/sage-org/sage-engine.git", branch = "rl-xp" }
+torchfold = { git = "https://github.com/mhoangvslev/torchfold.git", branch = "master" }
+hdt = "^2.3"
+postgres = "^4.0"
+psqlparse = "1.0rc7"
+psycopg2-binary = { version = "2.8.6", optional = true }
+pyparsing = "2.4.7"
+tqdm = "4.62.3"

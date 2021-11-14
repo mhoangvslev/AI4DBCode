@@ -29,8 +29,8 @@ class TreeRoot(nn.Module):
         # self.max_pooling = nn.AdaptiveAvgPool2d((1,num_units))
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
-    def forward(self, tree_list):
 
+    def forward(self, tree_list):
         return self.relu(self.FC(self.sum_pooling(tree_list)).view(-1,self.num_units))
 
 class SPINN(nn.Module):

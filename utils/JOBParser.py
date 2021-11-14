@@ -1,5 +1,82 @@
+import os
 import numpy as np
+from rdflib.plugins.sparql.operators import Builtin_REGEX, ConditionalAndExpression, ConditionalOrExpression, UnaryMinus, UnaryNot, UnaryPlus
+from torch._C import BoolType, Value
+from rdflib.term import Literal, Variable, URIRef
+from rdflib.plugins.sparql import parserutils
+
+from utils.parser.parsed_query import ParsedQuery
+from utils.parser.parser import QueryParser
+
 class Expr:
+    def __init__(self, expr, list_kind=0) -> None:
+        if os.environ["RTOS_ENGINE"] == "sql":
+            self.expr = ExprSQL(expr, list_kind=list_kind)
+        elif os.environ["RTOS_ENGINE"] == "sparql":
+            self.expr = ExprISQL(expr, list_kind=list_kind)
+        else:
+            raise ValueError("Unknown value for RTOS_ENGINE")
+    
+    def isCol(self):
+        return self.expr.isCol()
+    
+    def getValue(self, value_expr):
+        return self.expr.getValue(value_expr)
+
+    def getAliasName(self):
+        return self.expr.getAliasName()
+
+    def getColumnName(self):
+        return self.expr.getColumnName()
+
+    def __str__(self) -> str:
+        return self.expr.__str__()
+
+class ExprISQL:
+    def __init__(self, expr: parserutils.Expr, list_kind = 0):
+        self.expr = expr
+        self.list_kind = list_kind
+        self.isInt = False
+        self.val = 0
+
+    def isCol(self):
+        return isinstance(self.expr, Variable) or isinstance(self.expr, Literal)
+
+    def getAliasName(self):
+        return str(self)
+
+    def getColumnName(self):
+        return str(self)
+
+    def getValue(self, value_expr: parserutils.Expr):
+        if isinstance(value_expr, Literal):
+            if value_expr.datatype == URIRef('http://www.w3.org/2001/XMLSchema#string'):
+                return value_expr.value
+            elif value_expr.datatype == URIRef('http://www.w3.org/2001/XMLSchema#integer'):
+                self.isInt = True
+                self.val = value_expr.value
+                return str(self.val)
+            else:
+                raise ValueError("Unknown value in Expr")
+        elif isinstance(value_expr, Variable):
+            return str(value_expr)
+
+        elif value_expr._evalfn.__name__ == Builtin_REGEX.__name__:
+            return ExprISQL(value_expr.get('text')).getValue(), ExprISQL(value_expr.get('pattern')).getValue()
+        else:
+            raise ValueError("Unknown value in Expr")
+
+    def __str__(self,):
+        if isinstance(self.expr, Literal):
+            return self.getValue(self.expr)
+        elif isinstance(self.expr, Variable) :
+            return f'?{self.getValue(self.expr)}'
+        elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
+            return f' regex({ ", ".join(self.getValue(self.expr)) })'
+        else:
+            raise "No Known type of Expr"
+
+class ExprSQL:
     def __init__(self, expr,list_kind = 0):
         self.expr = expr
         self.list_kind = list_kind
@@ -55,8 +132,22 @@ class Expr:
         else:
             raise "No Known type of Expr"
 
-
 class TargetTable:
+    def __init__(self, target, alias=None) -> None:
+        if os.environ["RTOS_ENGINE"] == "sql":
+            self.target = TargetTableSQL(target)
+        elif os.environ["RTOS_ENGINE"] == "sparql":
+            self.target = TargetTableISQL(target, alias)
+        else:
+            raise ValueError("Unknown RTOS_ENGINE value")
+    
+    def getValue(self):
+        return self.target.getValue()
+
+    def __str__(self) -> str:
+        return self.target.__str__()
+        
+class TargetTableSQL:
     def __init__(self, target):
         """
         {'location': 7, 'name': 'alternative_name', 'val': {'FuncCall': {'funcname': [{'String': {'str': 'min'}}], 'args': [{'ColumnRef': {'fields': [{'String': {'str': 'an'}}, {'String': {'str': 'name'}}], 'location': 11}}], 'location': 7}}}
@@ -77,7 +168,44 @@ class TargetTable:
             else:
                 return "*"
 
+class TargetTableISQL:
+    def __init__(self, target, alias=None) -> None:
+        self.target = target
+        self.alias = alias
+
+    def getAliasName(self):
+        return self.alias
+    
+    def getFullName(self):
+        return self.target
+
+    def __str__(self):
+        return f'{self.getAliasName()}. \n'
+
+    def getValue(self):
+        return self.target
+
+
 class FromTable:
+    def __init__(self, from_table, alias=None):
+        if os.environ["RTOS_ENGINE"] == "sql":
+            self.from_table = FromTableSQL(from_table)
+        elif os.environ["RTOS_ENGINE"] == "sparql":
+            self.from_table = FromTableISQL(from_table, alias)
+        else:
+            raise ValueError("Unknown RTOS_ENGINE value")
+
+    def getFullName(self):
+        return self.from_table.getFullName()
+
+    def getAliasName(self):
+        return self.from_table.getAliasName()
+    
+    def __str__(self) -> str:
+        return self.from_table.__str__()
+
+
+class FromTableSQL:
     def __init__(self, from_table):
         """
         {'alias': {'Alias': {'aliasname': 'an'}}, 'location': 168, 'inhOpt': 2, 'relpersistence': 'p', 'relname': 'aka_name'}
@@ -93,8 +221,179 @@ class FromTable:
     def __str__(self,):
         return self.getFullName()+" AS "+self.getAliasName()
 
+class FromTableISQL:
+    def __init__(self, from_table, alias):
+        """
+        from_table = predicate
+        alias = s p o
+        """
+        self.from_table = from_table
+        self.alias = alias
+
+    def getFullName(self):
+        return self.from_table
+
+    def getAliasName(self, debug = False):
+        return self.alias
+
+    def __str__(self):
+        return f'{self.getAliasName()} .\n' 
 
 class Comparison:
+    def __init__(self, comparison) -> None:
+        if os.environ["RTOS_ENGINE"] == "sql":
+            self.comparision = ComparisonSQL(comparison)
+        elif os.environ["RTOS_ENGINE"] == "sparql":
+            self.comparision = ComparisionISQL(comparison)
+        else:
+            raise ValueError("Unknown value RTOS_ENGINE...")
+
+    def isCol(self):
+        return self.comparision.isCol()
+
+    def __str__(self):
+        return self.comparision.__str__()
+
+class ComparisionISQL:
+    def __init__(self, comparison) -> None:
+
+        def get_kind(comp: parserutils.Expr):
+            if comp._evalfn.__name__ == UnaryNot.__name__:
+                return "!"
+            elif comp._evalfn.__name__ == UnaryMinus.__name__:
+                return "-"
+            elif comp._evalfn.__name__ == UnaryPlus.__name__:
+                return "+"
+            elif comp._evalfn.__name__ == ConditionalAndExpression.__name__:
+                return "&&"
+            elif comp._evalfn.__name__ == ConditionalOrExpression.__name__:
+                return "||"
+            else:
+                raise ValueError(f"Did not recognize operator {comp._evalfn.__name__}")
+
+        """
+        A filter looks like any of these:
+            [
+                RelationalExpression_{
+                    'expr': rdflib.term.Variable('t_production_year'), 
+                    'op': '<=', 
+                    'other': rdflib.term.Literal('2010', datatype=rdflib.term.URIRef('http://www.w3.org/2001/XMLSchema#integer')), 
+                    '_vars': set()
+                }, 
+                UnaryNot_{
+                    'expr': Builtin_REGEX_{
+                        'text': rdflib.term.Variable('mc_note'), 
+                        'pattern': rdflib.term.Literal('\\(as Metro-Goldwyn-Mayer Pictures\\)'), 
+                        '_vars': {rdflib.term.Variable('mc_note')}
+                    }, 
+                    '_vars': {rdflib.term.Variable('mc_note')}
+                }, 
+                RelationalExpression_{
+                    'expr': rdflib.term.Variable('t_production_year'), 
+                    'op': '>=', 
+                    'other': rdflib.term.Literal('2005', datatype=rdflib.term.URIRef('http://www.w3.org/2001/XMLSchema#integer')), 
+                    '_vars': set()
+                }
+            ]
+        """
+        self.comparison: parserutils.Expr = comparison
+        self.column_list = []
+        self.comp_list = []
+        self.aliasname_list = []
+        self.kind = None
+        self.lexpr = None
+        self.rexpr = None
+
+        #print(self.comparison, type(self.comparison))
+
+        if "Relational" in self.comparison.name:
+            self.lexpr = Expr(self.comparison.get("expr"))
+            self.kind = self.comparison.get("op")
+            if not isinstance(self.comparison.get("other"), parserutils.Expr):
+                self.rexpr = Expr(self.comparison.get("other"),self.kind)
+            else:
+                self.rexpr = ComparisionISQL(self.comparison.get("other"))
+
+            self.aliasname_list = []
+
+            # self.aliasname_list.append(str(self))
+            # self.column_list.append(str(self))
+
+            if self.lexpr.isCol():
+                self.aliasname_list.append(self.lexpr.getAliasName())
+                self.column_list.append(self.lexpr.getColumnName())
+
+            if self.rexpr.isCol():
+                self.aliasname_list.append(self.rexpr.getAliasName())
+                self.column_list.append(self.rexpr.getColumnName())
+
+            self.comp_kind = 0
+
+        elif "Unary" in self.comparison.name:
+            self.lexpr = Expr(self.comparison.get('expr'))
+            self.kind = get_kind(self.comparison)
+
+            if self.lexpr.isCol():
+                self.aliasname_list.append(self.lexpr.getAliasName())
+                self.column_list.append(self.lexpr.getColumnName())
+
+        elif "Conditional" in self.comparison.name:
+            """
+            ConditionalOrExpression_{
+                'expr': RelationalExpression_{
+                    'expr': rdflib.term.Variable('t_production_year'), 
+                    'op': '>=', 
+                    'other': rdflib.term.Literal('2005', datatype=rdflib.term.URIRef('http://www.w3.org/2001/XMLSchema#integer')), 
+                    '_vars': set()
+                }, 
+                'other': [
+                    RelationalExpression_{
+                        'expr': rdflib.term.Variable('t_production_year'), 
+                        'op': '<=', 
+                        'other': rdflib.term.Literal('2010', datatype=rdflib.term.URIRef('http://www.w3.org/2001/XMLSchema#integer')), 
+                        '_vars': set()
+                    }
+                ], 
+                '_vars': set()
+            }
+            """
+
+            # "boolop"
+
+            self.kind = get_kind(self.comparison)
+            self.comp_list.append(ComparisionISQL(self.comparison.get('expr')))
+            self.comp_list.extend([ComparisionISQL(x) for x in self.comparison.get('other')])
+
+            self.aliasname_list = []
+            for comp in self.comp_list:
+                if comp.lexpr.isCol():
+                    self.lexpr = comp.lexpr
+                    # self.aliasname_list.append(str(comp))
+                    # self.column_list.append(str(comp))
+
+                    self.aliasname_list.append(comp.lexpr.getAliasName())
+                    self.column_list.append(comp.lexpr.getColumnName())
+
+                    #break
+
+            self.comp_kind = 2
+
+    def isCol(self):
+        return False
+    
+    def __str__(self, final=True):
+        res = ""
+        if len(self.comp_list) == 0:
+            if "Relational" in self.comparison.name or "Conditional" in self.comparison.name:
+                res += f'{ str(self.lexpr) } { self.kind } { str(self.rexpr) }'
+            elif "Unary" in self.comparison.name:
+                res += f'{ self.kind } { str(self.lexpr) }'
+        else:
+            res += f' {self.kind} '.join([ comp.__str__(final=False) for comp in self.comp_list ])
+        
+        return f'FILTER( { res } )' if final else res
+
+class ComparisonSQL:
     def __init__(self, comparison):
         self.comparison = comparison
         self.column_list = []
@@ -182,6 +481,16 @@ class Comparison:
             return res
 
 class Table:
+    def __init__(self, table_tree=None, table_name=None) -> None:
+        if os.environ["RTOS_ENGINE"] == "sql":
+            self.table = TableSQL(table_tree)
+        if os.environ["RTOS_ENGINE"] == "sparql":
+            self.table = TableISQL(table_name)
+    
+    def oneHotAll(self):
+        return self.table.oneHotAll()
+
+class TableSQL:
     def __init__(self, table_tree):
         self.name = table_tree["relation"]["RangeVar"]["relname"]
         self.column2idx = {}
@@ -193,27 +502,66 @@ class Table:
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))
 
+class TableISQL:
+    def __init__(self, table_name) -> None:
+        self.name = table_name
+        self.column2idx = {}
+        self.idx2column = { v:k for k, v in self.column2idx.items() }
+
+    def updateTable(self, newCol):
+        idx = len(self.column2idx)
+        self.column2idx[newCol] = idx
+        self.idx2column[idx] = newCol
+
+    def oneHotAll(self):
+        return np.zeros((1, len(self.column2idx)))
+        
 
 class DB:
     def __init__(self, schema,TREE_NUM_IN_NET=40):
+
         from psqlparse import parse_dict
         parse_tree = parse_dict(schema)
 
-        self.tables = []
+        self.tables = {}
         self.name2idx = {}
         self.table_names = []
         self.name2table = {}
         self.size = 0
         self.TREE_NUM_IN_NET = TREE_NUM_IN_NET
-        for idx, table_tree in enumerate(parse_tree):
-            self.tables.append(Table(table_tree["CreateStmt"]))
-            self.table_names.append(self.tables[-1].name)
-            self.name2idx[self.tables[-1].name] = idx
-            self.name2table[self.tables[-1].name] = self.tables[-1]
+
+        def add_table(table, idx):
+            self.tables[table.name] = table
+            self.table_names.append(table.name)
+            self.name2idx[table.name] = idx
+            self.name2table[table.name] = self.tables[table.name]
+
+        if os.environ["RTOS_ENGINE"] == "sql":
+            for idx, table_tree in enumerate(parse_tree):
+                table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
+                add_table(Table(table_tree["CreateStmt"], table_name=table_name), idx)
+
+        elif os.environ["RTOS_ENGINE"] == "sparql":
+            for i, table_tree in enumerate(parse_tree):
+                for j, columndef in enumerate(table_tree["CreateStmt"]["tableElts"]):
+                    table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
+                    if table_name == "title":
+                        table_name = "title_t"
+                    
+                    column_name = columndef["ColumnDef"]["colname"]
+                    table_name = f'http://imdb.org/{table_name}#{column_name}'
+                    add_table(TableISQL(table_name), i+j)
+            
+            for shortcut in [
+                "http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id"
+            ]:
+                add_table(TableISQL(shortcut), len(self.table_names))
+        else:
+            raise ValueError("Unknown value for env variable RTOS_ENGINE")
 
         self.columns_total = 0
 
-        for table in self.tables:
+        for table in self.tables.values():
             self.columns_total += len(table.idx2column)
 
         self.size = len(self.table_names)

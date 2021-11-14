@@ -37,6 +37,7 @@ services:
       RTOS_DB_NAME: "imdbload"
       RTOS_DB_HOST: "postgresql://${RTOS_DB_USER}:${RTOS_DB_PASSWORD}@postgres/${RTOS_DB_NAME}"
       RTOS_DB_PORT: "5433"
+      RTOS_ENGINE: "sparql"
     networks: [ postgresNetwork ]
     #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "python CostTraining.py"'
 
