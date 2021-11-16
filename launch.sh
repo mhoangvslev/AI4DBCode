@@ -67,14 +67,14 @@ else
     syntax_error;
 fi
 
-RTOS_JOB_DIR="JOB-queries/sparql-debug" \
-RTOS_SCHEMA_FILE="schema.sql" \
-RTOS_DB_PASSWORD="123456" \
-RTOS_DB_USER="postgres" \
-RTOS_DB_NAME="imdbload" \
-RTOS_DB_HOST="0.0.0.0" \
-RTOS_DB_PORT="5432" \
-RTOS_ISQL_ENDPOINT="sparql" \
-RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
-RTOS_ENGINE="sparql" python CostTraining.py
+# RTOS_JOB_DIR="JOB-queries/sparql-debug" \
+# RTOS_SCHEMA_FILE="schema.sql" \
+# RTOS_DB_PASSWORD="123456" \
+# RTOS_DB_USER="postgres" \
+# RTOS_DB_NAME="imdbload" \
+# RTOS_DB_HOST="0.0.0.0" \
+# RTOS_DB_PORT="5432" \
+# RTOS_ISQL_ENDPOINT="sparql" \
+# RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
+# RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
+# RTOS_ENGINE="sparql" python CostTraining.py

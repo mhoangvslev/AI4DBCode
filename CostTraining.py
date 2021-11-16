@@ -148,7 +148,7 @@ def train(trainSet,validateSet):
             print("Resampling training set...")
             trainSet = resample_sql(trainSet_temp)
         #     sql = random.sample(train_list_back,1)[0][0]
-        sqlt = random.sample(trainSet[0:],1)[0]
+        sqlt: sqlInfo = random.sample(trainSet[0:],1)[0]
         env = ENV(sqlt,db_info,runner,device)
         pg_cost = sqlt.getDPlatency()
 
@@ -159,7 +159,8 @@ def train(trainSet,validateSet):
         acBest = (not nr) and random.random()>0.7
         for t in tqdm(count()):
             # beginTime = time.time();
-            action_list, chosen_action,all_action = dqn.select_action(env,need_random=nr)
+            action_list, chosen_action, all_action = dqn.select_action(env,need_random=nr)
+            print(action_list, chosen_action)
             value_now = env.selectValue(policy_net)
             next_value = torch.min(action_list).detach()
             # e1Time = time.time()

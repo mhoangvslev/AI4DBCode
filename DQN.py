@@ -159,6 +159,24 @@ class DQN:
 
 
     def validate(self,val_list, tryTimes = 1):
+        """[summary]
+
+        MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.
+        (G)MRL: (Geometric) Mean Relevant Latency, applied to the ratio between model's latency and db engine. 
+            Given that the latency scores for each query follow a certain probability distribution,
+            the geometric mean (n-th root of product) indicates the most frequent value (a typical value) of that distribution.
+            In another word, when GMRL approaches 0, the model is worse than Postgres and when it's n > 1, it means that the model 
+            performs n times better than Postgres.
+
+            e.g: GMRL=2 means that overall, the model is twice better than PG 
+
+        Args:
+            val_list ([type]): [description]
+            tryTimes (int, optional): [description]. Defaults to 1.
+
+        Returns:
+            [type]: [description]
+        """
         rewards = []
         prt = []
         mes = 0

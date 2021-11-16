@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 from rdflib.plugins.sparql.operators import Builtin_REGEX, ConditionalAndExpression, ConditionalOrExpression, UnaryMinus, UnaryNot, UnaryPlus
 from torch._C import BoolType, Value
@@ -40,13 +41,20 @@ class ExprISQL:
         self.val = 0
 
     def isCol(self):
-        return isinstance(self.expr, Variable) or isinstance(self.expr, Literal)
+        #return isinstance(self.expr, Variable) or isinstance(self.expr, Literal)
+        return True
 
     def getAliasName(self):
-        return str(self)
+        return self.getColumnName()
 
     def getColumnName(self):
-        return str(self)
+        if isinstance(self.expr, Literal) or isinstance(self.expr, Variable):
+            return self.getValue(self.expr)
+        elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
+            var, _ = self.getValue(self.expr)
+            return var
+        else:
+            raise "No Known type of Expr"
 
     def getValue(self, value_expr: parserutils.Expr):
         if isinstance(value_expr, Literal):
@@ -57,22 +65,21 @@ class ExprISQL:
                 self.val = value_expr.value
                 return str(self.val)
             else:
-                raise ValueError("Unknown value in Expr")
+                return rf"'{str(value_expr)}'"
         elif isinstance(value_expr, Variable):
-            return str(value_expr)
+            return f'?{str(value_expr)}'
 
         elif value_expr._evalfn.__name__ == Builtin_REGEX.__name__:
-            return ExprISQL(value_expr.get('text')).getValue(), ExprISQL(value_expr.get('pattern')).getValue()
+            return self.getValue(value_expr.get('text')), self.getValue(value_expr.get('pattern'))
         else:
             raise ValueError("Unknown value in Expr")
 
     def __str__(self,):
-        if isinstance(self.expr, Literal):
+        if isinstance(self.expr, Literal) or isinstance(self.expr, Variable):
             return self.getValue(self.expr)
-        elif isinstance(self.expr, Variable) :
-            return f'?{self.getValue(self.expr)}'
         elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
-            return f' regex({ ", ".join(self.getValue(self.expr)) })'
+            var, pattern = self.getValue(self.expr)
+            return f'regex({var}, {pattern})'
         else:
             raise "No Known type of Expr"
 
@@ -105,7 +112,6 @@ class ExprSQL:
                 else:
                     return value_expr["TypeCast"]['typeName']['TypeName']['names'][1]['String']['str']+" '"+value_expr["TypeCast"]['arg']['A_Const']['val']['String']['str']+ "' year"
         else:
-            print(value_expr.keys())
             raise "unknown Value in Expr"
 
     def getAliasName(self,):
@@ -377,6 +383,8 @@ class ComparisionISQL:
                     #break
 
             self.comp_kind = 2
+        else:
+            raise NotImplementedError(f"No handler for {self.comparison.name}")
 
     def isCol(self):
         return False
@@ -387,11 +395,11 @@ class ComparisionISQL:
             if "Relational" in self.comparison.name or "Conditional" in self.comparison.name:
                 res += f'{ str(self.lexpr) } { self.kind } { str(self.rexpr) }'
             elif "Unary" in self.comparison.name:
-                res += f'{ self.kind } { str(self.lexpr) }'
+                res += f'{ self.kind }{ str(self.lexpr) }'
         else:
             res += f' {self.kind} '.join([ comp.__str__(final=False) for comp in self.comp_list ])
         
-        return f'FILTER( { res } )' if final else res
+        return f'FILTER({ res })' if final else res
 
 class ComparisonSQL:
     def __init__(self, comparison):
@@ -509,9 +517,11 @@ class TableISQL:
         self.idx2column = { v:k for k, v in self.column2idx.items() }
 
     def updateTable(self, newCol):
-        idx = len(self.column2idx)
-        self.column2idx[newCol] = idx
-        self.idx2column[idx] = newCol
+        #print(self.name, self.column2idx)
+        if newCol not in self.column2idx.keys():
+            idx = len(self.column2idx)
+            self.column2idx[newCol] = idx
+            self.idx2column[idx] = newCol
 
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))

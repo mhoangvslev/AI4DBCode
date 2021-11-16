@@ -21,6 +21,11 @@ class TreeLSTM(nn.Module):
         h = o.sigmoid() * c.tanh()
         return h,c
 class TreeRoot(nn.Module):
+    """TreeLSTM's root. The dynamic pooling happens here
+
+    Args:
+        nn ([type]): Implements PyTorch's Neural Network module
+    """
     def __init__(self,num_units):
         super(TreeRoot, self).__init__()
         self.num_units = num_units
@@ -34,6 +39,14 @@ class TreeRoot(nn.Module):
         return self.relu(self.FC(self.sum_pooling(tree_list)).view(-1,self.num_units))
 
 class SPINN(nn.Module):
+    """
+    The actual implementation of TreeLSTM. SPINN (https://github.com/stanfordnlp/spinn) combines
+    parsing and interpretation within a single tree-sequence hybrid model by integrating tree-structured sentence 
+    interpretation into the linear sequential structure of a shift-reduce parser. See https://arxiv.org/abs/1603.06021 
+
+    Args:
+        nn ([type]): [description]
+    """
 
     def __init__(self, n_classes, size, n_words, mask_size,device,max_column_in_table = 15):
         super(SPINN, self).__init__()

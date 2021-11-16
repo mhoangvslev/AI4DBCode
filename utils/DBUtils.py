@@ -62,7 +62,7 @@ class DBRunner(object):
         plTime = time.time()-startTime
         return plTime
 
-    def getLatency(self, sql,sqlwithplan):
+    def getLatency(self, sql, sqlwithplan):
         raise NotImplementedError()
     
     def getCost(self,sql,sqlwithplan):
@@ -306,20 +306,29 @@ class ISQLRunner(DBRunner):
     def _query_cost(self, query: str, force_order: bool = False) -> float:
         response = self._explain(query, force_order=force_order)
         return float(response.split('\n')[9])
+
+    def _query_latency(self, query, force_order=True):
+        start_time = time.time()
+        self._execute_query(query, force_order=force_order)
+        end_time = time.time()
+        afterCost = end_time - start_time
+        return afterCost
             
-    def getLatency(self, sql, sqlwithplan):
-        thisQueryCost = self.getCost(sql,sqlwithplan)
+    def getLatency(self, sql, sqlwithplan):        
+        #dp_cost = self._query_cost(sql, force_order=False)
+        #dp_latency = self._query_latency(sql, force_order=False)
+
+        thisQueryCost = self._query_cost(sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost() < 100:
             try:
-                start_time = time.time()
-                self._execute_query(sqlwithplan, force_order=True)
-                end_time = time.time()
-                afterCost = end_time - start_time
+                afterCost = self._query_latency(sqlwithplan, force_order=True)
             except: 
-                pass
-                #afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
-        
-        afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
+                afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(), sql.timeout())
+                raise "Something when wrong while executing query"
+        else:
+            afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
+            raise "Something when wrong while executing query"
+
         afterCost += 5
         if self.isLatencyRecord:
             LatencyDict[sqlwithplan] =  afterCost
@@ -329,7 +338,7 @@ class ISQLRunner(DBRunner):
         return afterCost
 
     def getCost(self, sql, sqlwithplan):
-        return self._query_cost(sqlwithplan, force_order=True)
+        return self._query_cost(sqlwithplan, force_order=False)
     
     def getSelectivity(self, table, whereCondition):
         global selectivityDict

@@ -14,6 +14,8 @@ import os
 
 tree_lstm_memory = {}
 class JoinTree:
+    """Where the magic happens
+    """
     def __init__(self, sqlt, db_info: DB, runner: DBRunner, device):
         global tree_lstm_memory
         tree_lstm_memory  ={}
@@ -85,6 +87,7 @@ class JoinTree:
 
                 from_tables = []
                 target_tables = []
+                other_tables = []
 
                 subjects = []
                 predicates = []
@@ -101,24 +104,26 @@ class JoinTree:
                             from_tables.append(FromTableISQL(p_j, f'{s_j} <{p_j}> {o_j}'))
                             target_tables.append(TargetTableISQL(p_i, f'{s_i} <{p_i}> {o_i}'))
                         
-                        if o_i == s_j:
+                        elif o_i == s_j:
                             from_tables.append(FromTableISQL(p_i, f'{s_i} <{p_i}> {o_i}'))
                             target_tables.append(TargetTableISQL(p_j, f'{s_j} <{p_j}> {o_j}'))
-                return from_tables, target_tables
+                        else:
+                            other_tables.append(FromTableISQL(p_i, f'{s_i} <{p_i}> {o_i}'))
+                return from_tables, target_tables, other_tables
 
 
             parse_result: ParsedQuery = QueryParser.parse(self.sql)
             #print(parse_result.triple_patterns)
             #print(parse_result.filters)
-            self.from_table_list, self.target_table_list = get_joins(parse_result.triple_patterns)
+            self.from_table_list, self.target_table_list, self.other_table_list = get_joins(parse_result.triple_patterns)
             
-            for table in self.from_table_list + self.target_table_list:
+            for table in self.from_table_list + self.target_table_list + self.other_table_list:
                 self.aliasname2fromtable[table.getAliasName()] = table
                 self.aliasname2fullname[table.getAliasName()] = table.getFullName()
                 db_info.tables[table.getFullName()].updateTable(table.getAliasName())
             self.aliasnames = set(self.aliasname2fromtable.keys())
             self.comparison_list = [ComparisionISQL(x) for x in parse_result.filters]
-            self.aliasnames_root_set = set([x.getAliasName() for x in self.from_table_list + self.target_table_list])
+            self.aliasnames_root_set = set([x.getAliasName() for x in self.from_table_list + self.target_table_list + self.other_table_list])
 
 
         self.db_info = db_info
@@ -156,7 +161,7 @@ class JoinTree:
                 Returns:
                     [type]: [description]
                 """
-                aliasname = comparison.aliasname_list[0]
+                aliasname = comparison.aliasname_list[mode]
                 aliasname = list(filter(lambda x: aliasname in x, self.aliasnames))[0]
 
                 if os.environ["RTOS_ENGINE"] == "sparql":
@@ -169,10 +174,10 @@ class JoinTree:
 
                 if os.environ["RTOS_ENGINE"] == "sparql":
                     #print(left_table_class.column2idx.keys(), comparison.column_list[0])
-                    table_idx = dict(filter(lambda x: comparison.column_list[0] in x[0], table_class.column2idx.items()))
+                    table_idx = dict(filter(lambda x: comparison.column_list[mode] in x[0], table_class.column2idx.items()))
                     table_idx = list(table_idx.values())[0]
                 else:
-                    table_idx = table_class.column2idx[comparison.column_list[0]]
+                    table_idx = table_class.column2idx[comparison.column_list[mode]]
                 return aliasname, fullname, table_idx
 
             if len(comparison.aliasname_list) == 2:
@@ -194,8 +199,9 @@ class JoinTree:
                 idx1 = self.db_info.name2idx[right_fullname]
                 self.join_matrix[idx0][idx1] = 1
                 self.join_matrix[idx1][idx0] = 1
+            
+            #elif len(comparison.aliasname_list) == 1:
             else:
-                print(comparison.aliasname_list)
                 if not comparison.aliasname_list[0] in self.filter_list:
                     self.filter_list[comparison.aliasname_list[0]] = []
                 self.filter_list[comparison.aliasname_list[0]].append(comparison)
@@ -204,7 +210,7 @@ class JoinTree:
                 comp_alias = dict(filter(lambda x: comparison.aliasname_list[0] in x[0], self.aliasname2fromtable.items()))
                 comp_alias = list(comp_alias.keys())[0]
 
-                print(comp_alias)
+                #print(comp_alias)
 
                 self.table_fea_set[left_aliasname][left_table_idx * 2 + 1] += self.runner.getSelectivity(
                     str(self.aliasname2fromtable[comp_alias]),
@@ -227,15 +233,29 @@ class JoinTree:
         for filter_table in self.filter_list:
             for comparison in self.filter_list[filter_table]:
                 aliasname = comparison.aliasname_list[0]
-                fullname = self.aliasname2fullname[aliasname]
-                table = self.db_info.name2table[fullname]
+                fullname = dict(filter(lambda x: aliasname in x[0], self.aliasname2fullname.items()))
+                fullname = list(fullname.values())[0]
+                
+                table = dict(filter(lambda x: fullname in x[0], self.db_info.name2table.items()))
+                table = list(table.values())[0]
                 for column in comparison.column_list:
-                    columnidx = table.column2idx[column]
-                    predice_list_dict[self.aliasname2fullname[filter_table]][columnidx] = 1
+                    columnidx = dict(filter(lambda x: column in x[0], table.column2idx.items()))
+                    columnidx = list(columnidx.values())[0]
+
+                    filter_name = dict(filter(lambda x: filter_table in x[0], self.aliasname2fullname.items()))
+                    filter_name = list(filter_name.keys())[0]
+                    predice_list_dict[self.aliasname2fullname[filter_name]][columnidx] = 1
 
         self.predice_feature = []
         for fullname in predice_list_dict:
             self.predice_feature+= predice_list_dict[fullname]
+
+        """
+            self.join_matrix is the attribute matrix for column c in neural network (denoted M in the paper)
+            self.table_fea_set is the feature vector of column c (denoted F(C) in the paper)
+            R is representation for column (c), state (s), join tree (T) or query (q)
+        """
+
         self.predice_feature = np.asarray(self.predice_feature).reshape(1,-1)
         self.join_matrix = torch.tensor(np.asarray(self.join_matrix).reshape(1,-1),device = self.device,dtype = torch.float32)
 
