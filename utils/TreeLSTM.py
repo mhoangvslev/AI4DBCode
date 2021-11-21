@@ -4,7 +4,7 @@ import torchfold
 import torch.nn as nn
 class TreeLSTM(nn.Module):
     def __init__(self, num_units):
-        super(TreeLSTM, self).__init__()
+        super().__init__()
         self.num_units = num_units
         self.FC1 = nn.Linear(num_units, 5 * num_units)
         self.FC2 = nn.Linear(num_units, 5 * num_units)
@@ -27,7 +27,7 @@ class TreeRoot(nn.Module):
         nn ([type]): Implements PyTorch's Neural Network module
     """
     def __init__(self,num_units):
-        super(TreeRoot, self).__init__()
+        super().__init__()
         self.num_units = num_units
         self.FC = nn.Linear(num_units, num_units)
         self.sum_pooling = nn.AdaptiveAvgPool2d((1,num_units))
@@ -49,13 +49,14 @@ class SPINN(nn.Module):
     """
 
     def __init__(self, n_classes, size, n_words, mask_size,device,max_column_in_table = 15):
-        super(SPINN, self).__init__()
+        super().__init__()
         self.size = size
         self.tree_lstm = TreeLSTM(size)
         self.tree_root = TreeRoot(size)
         self.FC = nn.Linear(size*2, size)
         self.table_embeddings = nn.Embedding(n_words, size)#2 * max_column_in_table * size)
         self.column_embeddings = nn.Embedding(n_words, 2 * max_column_in_table * size)
+
         self.out = nn.Linear(size*2, size)
         self.out2 = nn.Linear(size, n_classes)
         self.outFc = nn.Linear(mask_size, size)
@@ -70,11 +71,12 @@ class SPINN(nn.Module):
         self.leafLn = nn.LayerNorm(size,)
         self.device = device
 
-    def leaf(self, word_id, table_fea=None):
+    def leaf(self, word_id: torch.Tensor, table_fea: torch.Tensor=None):
         all_columns = table_fea.view(-1,self.max_column_in_table*2,1)*self.column_embeddings(word_id).reshape(-1,2 * self.max_column_in_table,self.size)
         all_columns = self.relu(self.leafFC(all_columns))
         table_emb = self.max_pooling(all_columns.view(-1,self.max_column_in_table*2,self.size)).view(-1,self.size)
         return self.leafLn(table_emb), torch.zeros(word_id.size()[0], self.size,device = self.device,dtype = torch.float32)
+        
     def inputX(self,left_emb,right_emb):
         cat_emb = torch.cat([left_emb,right_emb],dim = 1)
         return self.relu(self.FC(cat_emb))

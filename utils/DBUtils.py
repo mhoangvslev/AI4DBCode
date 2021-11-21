@@ -7,6 +7,7 @@ import re
 import logging
 import time
 import os
+import shutil
 
 from math import log
 from SPARQLWrapper import SPARQLWrapper, JSON
@@ -22,9 +23,8 @@ LatencyDict = {}
 selectivityDict = {}
 LatencyRecordFileHandle = None
 
-class DBRunner(object):
+class DBRunner:
     def __init__(self, isCostTraining = True,latencyRecord = True,latencyRecordFile = "RecordFile.json") -> None:
-        super().__init__()
         self.isLatencyRecord = latencyRecord
         # self.LatencyRecordFileHandle = None
         global LatencyRecordFileHandle
@@ -97,7 +97,6 @@ class PGRunner(DBRunner):
         :param sql:a sqlSample object
         :return: the latency of sql
         """
-        # query = sql.toSql(os.environ["RTOS_ENGINE"])
         if self.isCostTraining:
             return self.getCost(sql,sqlwithplan)
         global LatencyDict
@@ -213,7 +212,13 @@ class ISQLWrapper(object):
         self.password = password
 
     def execute_script(self, script: str):
-        cmd = [f'{os.environ["VIRTUOSO_HOME"]}/bin/isql', self.hostname, self.username, self.password, script]
+        isql = shutil.which('isql')
+        #isql = None
+        if isql is None: 
+            isql = 'docker exec virtuoso-opensource /root/virtuoso-opensource/bin/isql' 
+            
+        cmd = (isql + f' {self.hostname} {self.username} {self.password} {script}').split(' ')
+        
         process = subprocess.run(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -224,6 +229,7 @@ class ISQLWrapper(object):
     def execute_cmd(self, cmd: str):
         if not cmd.endswith(';'):
             cmd += ';'
+                
         tf_query = tempfile.NamedTemporaryFile()
         tf_query.write(cmd.encode('utf-8'))
         tf_query.flush()
@@ -317,6 +323,13 @@ class ISQLRunner(DBRunner):
     def getLatency(self, sql, sqlwithplan):        
         #dp_cost = self._query_cost(sql, force_order=False)
         #dp_latency = self._query_latency(sql, force_order=False)
+
+        if self.isCostTraining:
+            return self.getCost(sql,sqlwithplan)
+        global LatencyDict
+        if self.isLatencyRecord:
+            if sqlwithplan in LatencyDict:
+                return LatencyDict[sqlwithplan]
 
         thisQueryCost = self._query_cost(sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost() < 100:

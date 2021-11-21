@@ -18,8 +18,8 @@ from tqdm import tqdm
 
 config = Config()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 with open(config.schemaFile, "r") as f:
     createSchema = "".join(f.readlines())
@@ -28,8 +28,22 @@ db_info = DB(createSchema)
 
 featureSize = 128
 
-policy_net = SPINN(n_classes = 1, size = featureSize, n_words = 50,mask_size= len(db_info)*len(db_info),device=device).to(device)
-target_net = SPINN(n_classes = 1, size = featureSize, n_words = 50,mask_size= len(db_info)*len(db_info),device=device).to(device)
+policy_net = SPINN(
+    n_classes = 1, size = featureSize, 
+    n_words = config.n_words,
+    mask_size= len(db_info)*len(db_info),
+    device=device, 
+    max_column_in_table=config.max_column_in_table
+).to(device)
+
+target_net = SPINN(
+    n_classes = 1, size = featureSize, 
+    n_words = config.n_words, 
+    mask_size= len(db_info)*len(db_info),
+    device=device, 
+    max_column_in_table=config.max_column_in_table
+).to(device)
+
 for name, param in policy_net.named_parameters():
     print(name,param.shape)
     if len(param.shape)==2:
@@ -86,7 +100,7 @@ def QueryLoader(QueryDir):
         L = []
         for root, dirs, files in tqdm(os.walk(file_dir)):
             for file in tqdm(files):
-                if os.path.splitext(file)[1] in ['.sql', '.sparql']:
+                if os.path.splitext(file)[1] == f'.{os.environ["RTOS_ENGINE"]}':
                     L.append(os.path.join(root, file))
         return L
     files = file_name(QueryDir)

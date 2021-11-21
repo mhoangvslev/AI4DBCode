@@ -1,37 +1,12 @@
 import os
 import re
+from typing import List, Tuple, Union
 import numpy as np
-from rdflib.plugins.sparql.operators import Builtin_REGEX, ConditionalAndExpression, ConditionalOrExpression, UnaryMinus, UnaryNot, UnaryPlus
+from rdflib.plugins.sparql.operators import Builtin_REGEX, Builtin_STR, ConditionalAndExpression, ConditionalOrExpression, RelationalExpression, UnaryMinus, UnaryNot, UnaryPlus
 from torch._C import BoolType, Value
 from rdflib.term import Literal, Variable, URIRef
 from rdflib.plugins.sparql import parserutils
-
-from utils.parser.parsed_query import ParsedQuery
-from utils.parser.parser import QueryParser
-
-class Expr:
-    def __init__(self, expr, list_kind=0) -> None:
-        if os.environ["RTOS_ENGINE"] == "sql":
-            self.expr = ExprSQL(expr, list_kind=list_kind)
-        elif os.environ["RTOS_ENGINE"] == "sparql":
-            self.expr = ExprISQL(expr, list_kind=list_kind)
-        else:
-            raise ValueError("Unknown value for RTOS_ENGINE")
-    
-    def isCol(self):
-        return self.expr.isCol()
-    
-    def getValue(self, value_expr):
-        return self.expr.getValue(value_expr)
-
-    def getAliasName(self):
-        return self.expr.getAliasName()
-
-    def getColumnName(self):
-        return self.expr.getColumnName()
-
-    def __str__(self) -> str:
-        return self.expr.__str__()
+from ImportantConfig import Config
 
 class ExprISQL:
     def __init__(self, expr: parserutils.Expr, list_kind = 0):
@@ -41,20 +16,27 @@ class ExprISQL:
         self.val = 0
 
     def isCol(self):
-        #return isinstance(self.expr, Variable) or isinstance(self.expr, Literal)
-        return True
+        return not isinstance(self.expr, Literal)
+        #return True
 
     def getAliasName(self):
-        return self.getColumnName()
-
-    def getColumnName(self):
         if isinstance(self.expr, Literal) or isinstance(self.expr, Variable):
             return self.getValue(self.expr)
         elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
             var, _ = self.getValue(self.expr)
             return var
+        elif self.expr._evalfn.__name__ == Builtin_STR.__name__ :
+            return self.getValue(self.expr)
         else:
-            raise "No Known type of Expr"
+            raise NotImplementedError(f"No Known type of {self.expr}")
+        
+    def getColumnName(self):
+        # if isinstance(self.expr, Literal):
+        #     return self.getAliasName()
+        # else:
+        #     return re.sub(r'\d', '', self.getAliasName())
+        return self.getAliasName()
+        
 
     def getValue(self, value_expr: parserutils.Expr):
         if isinstance(value_expr, Literal):
@@ -68,11 +50,12 @@ class ExprISQL:
                 return rf"'{str(value_expr)}'"
         elif isinstance(value_expr, Variable):
             return f'?{str(value_expr)}'
-
         elif value_expr._evalfn.__name__ == Builtin_REGEX.__name__:
             return self.getValue(value_expr.get('text')), self.getValue(value_expr.get('pattern'))
+        elif value_expr._evalfn.__name__ == Builtin_STR.__name__:
+            return self.getValue(value_expr.get('arg'))
         else:
-            raise ValueError("Unknown value in Expr")
+            raise NotImplementedError(f"Unknown expression of type {value_expr}")
 
     def __str__(self,):
         if isinstance(self.expr, Literal) or isinstance(self.expr, Variable):
@@ -80,8 +63,10 @@ class ExprISQL:
         elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
             var, pattern = self.getValue(self.expr)
             return f'regex({var}, {pattern})'
+        elif self.expr._evalfn.__name__ == Builtin_STR.__name__ :
+            return f'str({self.getValue(self.expr)})'
         else:
-            raise "No Known type of Expr"
+            raise NotImplementedError(f"Unknown expression of type {self.expr}")
 
 class ExprSQL:
     def __init__(self, expr,list_kind = 0):
@@ -137,21 +122,6 @@ class ExprSQL:
 
         else:
             raise "No Known type of Expr"
-
-class TargetTable:
-    def __init__(self, target, alias=None) -> None:
-        if os.environ["RTOS_ENGINE"] == "sql":
-            self.target = TargetTableSQL(target)
-        elif os.environ["RTOS_ENGINE"] == "sparql":
-            self.target = TargetTableISQL(target, alias)
-        else:
-            raise ValueError("Unknown RTOS_ENGINE value")
-    
-    def getValue(self):
-        return self.target.getValue()
-
-    def __str__(self) -> str:
-        return self.target.__str__()
         
 class TargetTableSQL:
     def __init__(self, target):
@@ -174,42 +144,53 @@ class TargetTableSQL:
             else:
                 return "*"
 
-class TargetTableISQL:
-    def __init__(self, target, alias=None) -> None:
-        self.target = target
-        self.alias = alias
+class DummyTableISQL:
+    def __init__(self, s, p, o) -> None:
+        self._s = s
+        self._p = p
+        self._o = o
+        
+        fn_s = re.sub(r'\d', '', s) if s.startswith("?") else s
+        fn_o = re.sub(r'\d', '', o) if o.startswith("?") else o
+
+        self.alias = f"{s} <{p}> {o}"
+        self.fullname = f"{fn_s} <{p}> {fn_o}"
+    
+    @property
+    def s(self) -> str:
+        return self._s
+
+    @property
+    def p(self) -> str:
+        return self._p
+    
+    @property
+    def o(self) -> str:
+        return self._o
 
     def getAliasName(self):
         return self.alias
     
     def getFullName(self):
-        return self.target
+        return self._p
 
     def __str__(self):
-        return f'{self.getAliasName()}. \n'
+        return self.getAliasName()
+    
+    def __eq__(self, __o: object) -> bool:
+        return self.alias == __o.alias
+    
+    def __hash__(self) -> int:
+        return hash(self.alias)
+
+class TargetTableISQL(DummyTableISQL):
+
+    def __init__(self, s, p, o) -> None:
+        super().__init__(s, p, o)
 
     def getValue(self):
-        return self.target
-
-
-class FromTable:
-    def __init__(self, from_table, alias=None):
-        if os.environ["RTOS_ENGINE"] == "sql":
-            self.from_table = FromTableSQL(from_table)
-        elif os.environ["RTOS_ENGINE"] == "sparql":
-            self.from_table = FromTableISQL(from_table, alias)
-        else:
-            raise ValueError("Unknown RTOS_ENGINE value")
-
-    def getFullName(self):
-        return self.from_table.getFullName()
-
-    def getAliasName(self):
-        return self.from_table.getAliasName()
+        return self.getFullName()
     
-    def __str__(self) -> str:
-        return self.from_table.__str__()
-
 
 class FromTableSQL:
     def __init__(self, from_table):
@@ -227,43 +208,68 @@ class FromTableSQL:
     def __str__(self,):
         return self.getFullName()+" AS "+self.getAliasName()
 
-class FromTableISQL:
-    def __init__(self, from_table, alias):
-        """
-        from_table = predicate
-        alias = s p o
-        """
-        self.from_table = from_table
-        self.alias = alias
+class FromTableISQL(DummyTableISQL):
+    def __init__(self, s, p, o) -> None:
+        super().__init__(s, p, o)
 
-    def getFullName(self):
-        return self.from_table
+class ComparisonDummy():
+    def __init__(self, s, p, o, cl, al) -> None:
+        self.s = s
+        self.p = p
+        self.o = o
 
-    def getAliasName(self, debug = False):
-        return self.alias
+        self.column_list = cl
+        self.aliasname_list = al
 
-    def __str__(self):
-        return f'{self.getAliasName()} .\n' 
+    def toString(self):
+        return self.__str__()
 
-class Comparison:
+    def __str__(self) -> str:
+        return f"{self.s} <{self.p}> {self.o}"
+
+class ComparisonISQLEqual():
+    """Build equivalent of t1.c1 = t2.c2 for sparql
+
+    Case 1: Join column
+    (?s1 ?p1 ?o1). (?o1 ?p2 ?o2) is same as p1.o1 = p2.o1
+
+    Case 2: equal comparison
+    (?o1 ?p1 "constant") is same as p1.o1 = "constant"
+    """
+    def __init__(self, join_name, join) -> None:
+        self.name = join_name
+        self.fromTable = join['fromTable']
+        self.targetTable = join['targetTable']
+        self.joinCol = join['joinCol']
+        self.fromOtherCol = join['fromOtherCol']
+        self.targetOtherCol = join['targetOtherCol']
+
+        self.column_list = [
+            self.fromOtherCol,
+            self.targetOtherCol
+            # self.joinCol,
+            # self.joinCol
+        ]
+
+        self.aliasname_list = [
+            f"{self.fromOtherCol} <{self.fromTable}> {self.joinCol}",
+            f"{self.joinCol} <{self.targetTable}> {self.targetOtherCol}"
+        ]
+
+    def breakdown(self):
+        return [
+            ComparisonDummy(self.fromOtherCol, self.fromTable, self.joinCol, self.column_list, self.aliasname_list),
+            ComparisonDummy(self.joinCol, self.targetTable, self.targetOtherCol, self.column_list, self.aliasname_list)
+        ]
+
+    def __str__(self) -> str:
+        raise NotImplementedError()
+        
+
+class ComparisonISQL:
     def __init__(self, comparison) -> None:
-        if os.environ["RTOS_ENGINE"] == "sql":
-            self.comparision = ComparisonSQL(comparison)
-        elif os.environ["RTOS_ENGINE"] == "sparql":
-            self.comparision = ComparisionISQL(comparison)
-        else:
-            raise ValueError("Unknown value RTOS_ENGINE...")
 
-    def isCol(self):
-        return self.comparision.isCol()
-
-    def __str__(self):
-        return self.comparision.__str__()
-
-class ComparisionISQL:
-    def __init__(self, comparison) -> None:
-
-        def get_kind(comp: parserutils.Expr):
+        def get_op(comp: parserutils.Expr):
             if comp._evalfn.__name__ == UnaryNot.__name__:
                 return "!"
             elif comp._evalfn.__name__ == UnaryMinus.__name__:
@@ -304,46 +310,57 @@ class ComparisionISQL:
         """
         self.comparison: parserutils.Expr = comparison
         self.column_list = []
-        self.comp_list = []
+        self.comp_list: List[Union[ComparisonISQL, ComparisonISQLEqual, ComparisonDummy]] = []
         self.aliasname_list = []
         self.kind = None
+        self.op = None
         self.lexpr = None
         self.rexpr = None
 
         #print(self.comparison, type(self.comparison))
 
-        if "Relational" in self.comparison.name:
-            self.lexpr = Expr(self.comparison.get("expr"))
-            self.kind = self.comparison.get("op")
-            if not isinstance(self.comparison.get("other"), parserutils.Expr):
-                self.rexpr = Expr(self.comparison.get("other"),self.kind)
-            else:
-                self.rexpr = ComparisionISQL(self.comparison.get("other"))
+        def update_alias_and_column(alias, column):
+            if isinstance(alias, list):
+                self.aliasname_list.extend(alias)
+            else: 
+                self.aliasname_list.append(alias)
 
-            self.aliasname_list = []
+            if isinstance(column, list):
+                self.column_list.extend(column)
+            else: 
+                self.column_list.append(column)
 
-            # self.aliasname_list.append(str(self))
-            # self.column_list.append(str(self))
+        if isinstance(self.comparison, (Variable, Literal)):
+            self.lexpr = ExprISQL(self.comparison)
+            self.aliasname_list.append(self.lexpr.getAliasName())
+            self.column_list.append(self.lexpr.getColumnName())
+            
+        elif self.comparison._evalfn.__name__ == RelationalExpression.__name__:
+            self.kind = 0
+
+            self.lexpr = ComparisonISQL(self.comparison.get("expr"))
+            self.op = self.comparison.get("op")
+            self.rexpr = ComparisonISQL(self.comparison.get("other"))
 
             if self.lexpr.isCol():
-                self.aliasname_list.append(self.lexpr.getAliasName())
-                self.column_list.append(self.lexpr.getColumnName())
+                update_alias_and_column(self.lexpr.getAliasName(), self.lexpr.getColumnName())
 
             if self.rexpr.isCol():
-                self.aliasname_list.append(self.rexpr.getAliasName())
-                self.column_list.append(self.rexpr.getColumnName())
+                update_alias_and_column(self.rexpr.getAliasName(), self.rexpr.getColumnName())
 
             self.comp_kind = 0
 
-        elif "Unary" in self.comparison.name:
-            self.lexpr = Expr(self.comparison.get('expr'))
-            self.kind = get_kind(self.comparison)
+        elif "Unary" in self.comparison._evalfn.__name__:
+            self.lexpr = ComparisonISQL(self.comparison.get('expr'))
+            self.kind = 1
+            self.op = get_op(self.comparison)
 
             if self.lexpr.isCol():
-                self.aliasname_list.append(self.lexpr.getAliasName())
-                self.column_list.append(self.lexpr.getColumnName())
+                update_alias_and_column(self.lexpr.getAliasName(), self.lexpr.getColumnName())
 
-        elif "Conditional" in self.comparison.name:
+            self.comp_kind = 2
+
+        elif "Conditional" in self.comparison._evalfn.__name__:
             """
             ConditionalOrExpression_{
                 'expr': RelationalExpression_{
@@ -365,53 +382,108 @@ class ComparisionISQL:
             """
 
             # "boolop"
+            self.kind = 1
+            self.op = get_op(self.comparison)
+            self.comp_list.append(ComparisonISQL(self.comparison.get('expr')))
+            self.comp_list.extend([ComparisonISQL(x) for x in self.comparison.get('other')])
 
-            self.kind = get_kind(self.comparison)
-            self.comp_list.append(ComparisionISQL(self.comparison.get('expr')))
-            self.comp_list.extend([ComparisionISQL(x) for x in self.comparison.get('other')])
-
-            self.aliasname_list = []
             for comp in self.comp_list:
                 if comp.lexpr.isCol():
                     self.lexpr = comp.lexpr
-                    # self.aliasname_list.append(str(comp))
-                    # self.column_list.append(str(comp))
-
-                    self.aliasname_list.append(comp.lexpr.getAliasName())
-                    self.column_list.append(comp.lexpr.getColumnName())
-
-                    #break
+                    update_alias_and_column(self.lexpr.getAliasName(), self.lexpr.getColumnName())
+                    break
 
             self.comp_kind = 2
+        
+        elif self.comparison._evalfn.__name__ == Builtin_REGEX.__name__:
+            self.kind = 7
+
+            self.lexpr = ExprISQL(self.comparison)
+            update_alias_and_column(self.lexpr.getAliasName(), self.lexpr.getColumnName())
+
+
+        elif self.comparison._evalfn.__name__ == Builtin_STR.__name__:
+            self.lexpr = ComparisonISQL(self.comparison.get('arg'))
+            update_alias_and_column(self.lexpr.getAliasName(), self.lexpr.getColumnName())
+
         else:
-            raise NotImplementedError(f"No handler for {self.comparison.name}")
+            raise NotImplementedError(f"No handler for {self.comparison.name}, value: \n {self.comparison}")
 
     def isCol(self):
-        return False
+        return not isinstance(self.comparison, Literal)
+        #return True
+
+    def getAliasName(self) -> List[str]:
+        res = []
+        
+        if len(self.comp_list) == 0:
+            if self.lexpr is not None:
+                alias = self.lexpr.getAliasName()
+                if isinstance(alias, list): res.extend(alias) 
+                else: res.append(alias)
+            if self.rexpr is not None:
+                alias = self.rexpr.getAliasName()
+                if isinstance(alias, list): res.extend(alias) 
+                else: res.append(alias)
+        else:
+            for comp in self.comp_list:
+                res.extend(comp.getAliasName())
+
+        #return res
+        return [ r for r in res if r.startswith('?') ]
+
+    def getColumnName(self) -> List[str]:
+        res = []
+        
+        if len(self.comp_list) == 0:
+            if self.lexpr is not None:
+                alias = self.lexpr.getColumnName()
+                if isinstance(alias, list): res.extend(alias) 
+                else: res.append(alias)
+            if self.rexpr is not None:
+                alias = self.rexpr.getColumnName()
+                if isinstance(alias, list): res.extend(alias) 
+                else: res.append(alias)
+        else:
+            for comp in self.comp_list:
+                res.extend(comp.getColumnName())
+        
+        return [ r for r in res if r.startswith('?') ]
+
+    def toString(self) -> str:
+        return f'FILTER({ str(self) })'
     
-    def __str__(self, final=True):
+    def __str__(self):
         res = ""
         if len(self.comp_list) == 0:
-            if "Relational" in self.comparison.name or "Conditional" in self.comparison.name:
-                res += f'{ str(self.lexpr) } { self.kind } { str(self.rexpr) }'
+            if isinstance(self.comparison, (Variable, Literal)):
+                res += str(self.lexpr)
+            elif "Relational" in self.comparison.name or "Conditional" in self.comparison.name:
+                res += f'{ str(self.lexpr) } { self.op } { str(self.rexpr) }'
             elif "Unary" in self.comparison.name:
-                res += f'{ self.kind }{ str(self.lexpr) }'
+                res += f'{ self.op }{ str(self.lexpr) }'
+            elif self.comparison.name == Builtin_REGEX.__name__:
+                res += str(self.lexpr)
+            elif self.comparison.name == Builtin_STR.__name__:
+                res += str(self.lexpr)
+            else:
+                raise NotImplementedError(f"Unknown handler for type {self.comparison.name}")
         else:
-            res += f' {self.kind} '.join([ comp.__str__(final=False) for comp in self.comp_list ])
+            res += f' {self.op} '.join([ str(comp) for comp in self.comp_list ])
         
-        return f'FILTER({ res })' if final else res
+        return res
 
 class ComparisonSQL:
     def __init__(self, comparison):
         self.comparison = comparison
         self.column_list = []
         if "A_Expr" in self.comparison:
-            self.lexpr = Expr(comparison["A_Expr"]["lexpr"])
+            self.lexpr = ExprSQL(comparison["A_Expr"]["lexpr"])
             self.kind = comparison["A_Expr"]["kind"]
             if not "A_Expr" in comparison["A_Expr"]["rexpr"]:
-                self.rexpr = Expr(comparison["A_Expr"]["rexpr"],self.kind)
+                self.rexpr = ExprSQL(comparison["A_Expr"]["rexpr"],self.kind)
             else:
-                self.rexpr = Comparison(comparison["A_Expr"]["rexpr"])
+                self.rexpr = ComparisonSQL(comparison["A_Expr"]["rexpr"])
 
             self.aliasname_list = []
 
@@ -425,7 +497,7 @@ class ComparisonSQL:
 
             self.comp_kind = 0
         elif "NullTest" in self.comparison:
-            self.lexpr = Expr(comparison["NullTest"]["arg"])
+            self.lexpr = ExprSQL(comparison["NullTest"]["arg"])
             self.kind = comparison["NullTest"]["nulltesttype"]
 
             self.aliasname_list = []
@@ -435,10 +507,9 @@ class ComparisonSQL:
                 self.column_list.append(self.lexpr.getColumnName())
             self.comp_kind = 1
         else:
-            #             "boolop"
+            # "boolop"
             self.kind = comparison["BoolExpr"]["boolop"]
-            self.comp_list = [Comparison(x)
-                              for x in comparison["BoolExpr"]["args"]]
+            self.comp_list = [ComparisonSQL(x) for x in comparison["BoolExpr"]["args"]]
             self.aliasname_list = []
             for comp in self.comp_list:
                 if comp.lexpr.isCol():
@@ -449,6 +520,10 @@ class ComparisonSQL:
             self.comp_kind = 2
     def isCol(self,):
         return False
+
+    def toString(self) -> str:
+        return str(self)
+    
     def __str__(self,):
 
         if self.comp_kind == 0:
@@ -488,16 +563,6 @@ class ComparisonSQL:
             res += ")"
             return res
 
-class Table:
-    def __init__(self, table_tree=None, table_name=None) -> None:
-        if os.environ["RTOS_ENGINE"] == "sql":
-            self.table = TableSQL(table_tree)
-        if os.environ["RTOS_ENGINE"] == "sparql":
-            self.table = TableISQL(table_name)
-    
-    def oneHotAll(self):
-        return self.table.oneHotAll()
-
 class TableSQL:
     def __init__(self, table_tree):
         self.name = table_tree["relation"]["RangeVar"]["relname"]
@@ -514,76 +579,66 @@ class TableISQL:
     def __init__(self, table_name) -> None:
         self.name = table_name
         self.column2idx = {}
-        self.idx2column = { v:k for k, v in self.column2idx.items() }
+        self.idx2column = {}
 
-    def updateTable(self, newCol):
-        #print(self.name, self.column2idx)
-        if newCol not in self.column2idx.keys():
-            idx = len(self.column2idx)
-            self.column2idx[newCol] = idx
-            self.idx2column[idx] = newCol
+    def updateTable(self, table: Union[TargetTableISQL, FromTableISQL]):
+        cols = [ table.s, table.o ]
+        for col in cols:
+            if col not in self.column2idx.keys():
+                idx = len(self.column2idx)
+                self.column2idx[col] = idx
+                self.idx2column[idx] = col
 
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))
         
-
 class DB:
-    def __init__(self, schema,TREE_NUM_IN_NET=40):
+    def __init__(self, schema: str, TREE_NUM_IN_NET=40):
 
         from psqlparse import parse_dict
         parse_tree = parse_dict(schema)
 
-        self.tables = {}
-        self.name2idx = {}
-        self.table_names = []
-        self.name2table = {}
+        self.tables: List[Union[TableISQL, TableSQL]] = []
+        self.name2idx: Tuple[str, int] = {}
+        self.table_names: List[str] = []
+        self.name2table: Tuple[ str, Union[TableISQL, TableSQL] ] = {}
         self.size = 0
         self.TREE_NUM_IN_NET = TREE_NUM_IN_NET
 
-        def add_table(table, idx):
-            self.tables[table.name] = table
+        def add_table(table: Union[TableSQL, TableISQL], idx):
+            self.tables.append(table)
             self.table_names.append(table.name)
             self.name2idx[table.name] = idx
-            self.name2table[table.name] = self.tables[table.name]
+            self.name2table[table.name] = table
 
         if os.environ["RTOS_ENGINE"] == "sql":
             for idx, table_tree in enumerate(parse_tree):
                 table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
-                add_table(Table(table_tree["CreateStmt"], table_name=table_name), idx)
+                add_table(TableSQL(table_tree["CreateStmt"]), idx)
 
         elif os.environ["RTOS_ENGINE"] == "sparql":
-            for i, table_tree in enumerate(parse_tree):
-                for j, columndef in enumerate(table_tree["CreateStmt"]["tableElts"]):
-                    table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
-                    if table_name == "title":
-                        table_name = "title_t"
-                    
-                    column_name = columndef["ColumnDef"]["colname"]
-                    table_name = f'http://imdb.org/{table_name}#{column_name}'
-                    add_table(TableISQL(table_name), i+j)
-            
-            for shortcut in [
-                "http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id"
-            ]:
-                add_table(TableISQL(shortcut), len(self.table_names))
+            relations = open(os.path.join(Config().JOBDir, 'relations.txt'), 'r').read().splitlines()
+            for idx, rel in enumerate(relations):
+                print(idx, rel)
+                add_table(TableISQL(rel), idx)
         else:
             raise ValueError("Unknown value for env variable RTOS_ENGINE")
 
         self.columns_total = 0
 
-        for table in self.tables.values():
+        for table in self.tables:
             self.columns_total += len(table.idx2column)
 
         self.size = len(self.table_names)
 
-    def __len__(self,):
+    def __len__(self):
         if self.size == 0:
             self.size = len(self.table_names)
         return self.size
 
-    def oneHotAll(self,):
+    def oneHotAll(self):
         return np.zeros((1, self.size))
 
-    def network_size(self,):
+    def network_size(self):
         return self.TREE_NUM_IN_NET*self.size
 

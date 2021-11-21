@@ -8,6 +8,7 @@ import torch
 from collections import namedtuple
 
 from tqdm import tqdm
+from utils.TreeLSTM import SPINN
 from utils.sqlSample import JoinTree
 import torch.optim as optim
 import numpy as np
@@ -22,9 +23,9 @@ class ENV(object):
         self.table_set = set([])
         self.res_table = []
         self.init_table = None
-        self.planSpace = 0#0:leftDeep,1:bushy
+        self.planSpace = 1#0:leftDeep,1:bushy
 
-    def actionValue(self,left,right,model):
+    def actionValue(self, left: str, right: str, model: SPINN):
         self.sel.joinTables(left,right,fake = True)
         res_Value = self.selectValue(model)
         self.sel.total -= 1
@@ -33,7 +34,7 @@ class ENV(object):
         self.sel.aliasnames_fa.pop(self.sel.right_son[self.sel.total])
         return res_Value
 
-    def selectValue(self,model):
+    def selectValue(self,model: SPINN):
         tree_state = []
         for idx in self.sel.aliasnames_root_set:
             if not idx in self.sel.aliasnames_fa:
@@ -62,7 +63,7 @@ class ENV(object):
         return self.sql.sql+self.hashs
     def allAction(self,model):
         action_value_list = []
-        for one_join in tqdm(self.sel.join_candidate, desc="Inspecting actions", unit="action"):
+        for one_join in self.sel.join_candidate:
             l_fa = self.sel.findFather(one_join[0])
             r_fa  =self.sel.findFather(one_join[1])
             if self.planSpace ==0:
@@ -140,7 +141,7 @@ class DQN:
         self.pgrunner = pgrunner
         self.device = device
         self.steps_done = 0
-    def select_action(self, env, need_random = True):
+    def select_action(self, env: ENV, need_random = True):
 
         sample = random.random()
         if need_random:
