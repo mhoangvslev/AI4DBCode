@@ -1,1 +1,0 @@
-select explain('sparql SELECT *  FROM <http://example.com/DAV/void> WHERE  {"midx <http://imdb.org/movie_info_idx#info_type_id> ?it .\n. \n?mc <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx .\n?midx <http://imdb.org/movie_info_idx#info_type_id> ?i. \n?mc <http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id> ?midx ."};', -7);

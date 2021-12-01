@@ -1,6 +1,10 @@
 
 import math
+import os
 import random
+from typing import Any, List, Tuple, Union
+from torch._C import device
+from torch.functional import Tensor
 import torchfold
 import torch.nn.functional as F
 #import torchvision.transforms as T
@@ -8,12 +12,17 @@ import torch
 from collections import namedtuple
 
 from tqdm import tqdm
+from ImportantConfig import Config
+from utils.DBUtils import DBRunner
+from utils.JOBParser import DB
 from utils.TreeLSTM import SPINN
-from utils.sqlSample import JoinTree
+from utils.sqlSample import JoinTree, sqlInfo
 import torch.optim as optim
 import numpy as np
 from math import log
 from itertools import count
+import pandas as pd
+from math import e
 
 class ENV(object):
     def __init__(self,sql,db_info,pgrunner,device):
@@ -23,9 +32,13 @@ class ENV(object):
         self.table_set = set([])
         self.res_table = []
         self.init_table = None
-        self.planSpace = 1#0:leftDeep,1:bushy
+        self.planSpace = int(os.environ["RTOS_JTREE_BUSHY"]) #0:leftDeep,1:bushy
+        self.terminate = False
 
-    def actionValue(self, left: str, right: str, model: SPINN):
+    def getPlan(self):
+        return self.sel.plan()
+
+    def actionValue(self, left: str, right: str, model: SPINN) -> Tensor:
         self.sel.joinTables(left,right,fake = True)
         res_Value = self.selectValue(model)
         self.sel.total -= 1
@@ -34,13 +47,13 @@ class ENV(object):
         self.sel.aliasnames_fa.pop(self.sel.right_son[self.sel.total])
         return res_Value
 
-    def selectValue(self,model: SPINN):
+    def selectValue(self, model: SPINN) -> Tensor:
         tree_state = []
         for idx in self.sel.aliasnames_root_set:
             if not idx in self.sel.aliasnames_fa:
                 tree_state.append(self.sel.encode_tree_regular(model,idx))
         res = torch.cat(tree_state,dim = 0)
-        return model.logits(res,self.sel.join_matrix)
+        return model.logits(res, self.sel.join_matrix)
 
     def selectValueFold(self,fold):
         tree_state = []
@@ -51,8 +64,6 @@ class ENV(object):
         return tree_state
         return fold.add('logits',tree_state,self.sel.join_matrix)
 
-
-
     def takeAction(self,left,right):
         self.sel.joinTables(left,right)
         self.hashs += left
@@ -61,21 +72,44 @@ class ENV(object):
 
     def hashcode(self):
         return self.sql.sql+self.hashs
-    def allAction(self,model):
+
+    def allAction(self, model: SPINN) -> Tensor:
+        """List all possible action for the model
+
+        Args:
+            model ([type]): [description]
+
+        Returns:
+            List[Any]: List of all possible actions
+        """
         action_value_list = []
+
         for one_join in self.sel.join_candidate:
-            l_fa = self.sel.findFather(one_join[0])
-            r_fa  =self.sel.findFather(one_join[1])
-            if self.planSpace ==0:
-                flag1 = one_join[1] ==r_fa and l_fa !=one_join[0]
-                if l_fa!=r_fa and (self.sel.total == 0 or flag1):
-                    action_value_list.append((self.actionValue(one_join[0],one_join[1],model),one_join))
-            elif self.planSpace==1:
-                if l_fa!=r_fa:
-                    action_value_list.append((self.actionValue(one_join[0],one_join[1],model),one_join))
+            
+            l_node, r_node = one_join[0], one_join[1]
+
+            l_fa = self.sel.findFather(l_node)
+            r_fa = self.sel.findFather(r_node)
+            if self.planSpace == 0:
+                """If left linear join tree, check if right parent is same as right node and left parent is not left node
+                """
+                flag1 = ( r_node == r_fa and l_fa != l_node )
+                if l_fa != r_fa and (self.sel.total == 0 or flag1):
+                    action_value_list.append((self.actionValue(l_node,r_node,model),one_join))
+            
+            elif self.planSpace == 1:
+                if l_fa != r_fa:
+                    action_value_list.append((self.actionValue(l_node,r_node,model),one_join))
+
+        print(f"Possible actions: {len(action_value_list)} out of {len(self.sel.join_candidate)} join candidates")
         return action_value_list
-    def reward(self,):
-        if self.sel.total+1 == len(self.sel.from_table_list):
+
+    def reward(self):
+        table_list = self.sel.all_table_list if os.environ['RTOS_ENGINE'] == "sparql" else self.sel.from_table_list
+        total = self.sel.total + 1
+        print(f"Selected total: {total} out of {len(table_list)}")
+
+        if total == len(table_list):
             return log( self.sel.plan2Cost())/log(1.5), True
         else:
             return 0,False
@@ -124,11 +158,11 @@ class ReplayMemory(object):
         self.bestJoinTreeValue = {}
 
 class DQN:
-    def __init__(self,policy_net,target_net,db_info,pgrunner,device):
+    def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device):
         self.Memory = ReplayMemory(1000)
         self.BATCH_SIZE = 1
 
-        self.optimizer = optim.Adam(policy_net.parameters(),lr = 3e-4   ,betas=(0.9,0.999))
+        self.optimizer = optim.Adam(policy_net.parameters(),lr=3e-4,betas=(0.9,0.999))
 
         self.steps_done = 0
         self.max_action = 25
@@ -141,7 +175,17 @@ class DQN:
         self.pgrunner = pgrunner
         self.device = device
         self.steps_done = 0
-    def select_action(self, env: ENV, need_random = True):
+
+    def select_action(self, env: ENV, need_random = True) -> Tuple[Tensor, Tuple[str, str], Tensor]:
+        """Decide the next action. During earlier episodes, actions will be chosen randomly but as the training goes on, only actions with minimal costs are chosen
+
+        Args:
+            env (ENV): [description]
+            need_random (bool, optional): [description]. Defaults to True.
+
+        Returns:
+            Tuple[Tensor, Tensor, Tensor]: tuple of possible actions, chosen action, all actions
+        """
 
         sample = random.random()
         if need_random:
@@ -150,16 +194,25 @@ class DQN:
             self.steps_done += 1
         else:
             eps_threshold = -1
+
         action_list = env.allAction(self.policy_net)
         action_batch = torch.cat([x[0] for x in action_list],dim = 1)
 
         if sample > eps_threshold:
-            return action_batch,action_list[torch.argmin(action_batch,dim = 1)[0]][1],[x[1] for x in action_list]
+            return (
+                action_batch, 
+                action_list[torch.argmin(action_batch,dim = 1)[0]][1],
+                [x[1] for x in action_list]
+            )
         else:
-            return action_batch,action_list[random.randint(0,len(action_list)-1)][1],[x[1] for x in action_list]
+            return (
+                action_batch,
+                action_list[random.randint(0,len(action_list)-1)][1],
+                [x[1] for x in action_list]
+            )
 
 
-    def validate(self,val_list, tryTimes = 1):
+    def validate(self, val_list: List[sqlInfo], tryTimes = 1) -> Union[float, float]:
         """[summary]
 
         MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.
@@ -186,7 +239,7 @@ class DQN:
             env = ENV(sql,self.db_info,self.pgrunner,self.device)
 
             for t in count():
-                action_list, chosen_action,all_action = self.select_action(env,need_random=False)
+                action_list, chosen_action, all_action = self.select_action(env,need_random=False)
 
                 left = chosen_action[0]
                 right = chosen_action[1]
@@ -194,13 +247,21 @@ class DQN:
 
                 reward, done = env.reward()
                 if done:
-                    rewards.append(np.exp(reward*log(1.5)-log(pg_cost)))
-                    mes = mes + reward*log(1.5)-log(pg_cost)
+                    rwd = reward*log(1.5)-log(pg_cost)
+                    rewards.append(np.exp(rwd))
+                    mes = mes + rwd
+
+                    fn = os.path.join(Config().JOBDir, "summary.csv")
+                    pd.DataFrame(
+                        [[t, sql.filename, rwd, mes]], 
+                        columns=["step", "query", "reward", "mes"]
+                    ).to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
                     break
+
         lr = len(rewards)
-        from math import e
-        print("MRC",sum(rewards)/lr,"GMRL",e**(mes/lr))
-        return sum(rewards)/lr
+        mrc, gmrl = sum(rewards)/lr, e**(mes/lr)        
+        print("MRC",mrc,"GMRL",gmrl)
+        return mrc, gmrl
 
     def optimize_model(self,):
         import time

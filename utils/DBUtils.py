@@ -8,6 +8,7 @@ import logging
 import time
 import os
 import shutil
+import requests
 
 from math import log
 from SPARQLWrapper import SPARQLWrapper, JSON
@@ -65,7 +66,7 @@ class DBRunner:
     def getLatency(self, sql, sqlwithplan):
         raise NotImplementedError()
     
-    def getCost(self,sql,sqlwithplan):
+    def getCost(self, sql, sqlwithplan: str):
         raise NotImplementedError()    
 
     def getSelectivity(self,table,whereCondition):
@@ -92,7 +93,7 @@ class PGRunner(DBRunner):
         self._port = port
         self.config = PGConfig()
         
-    def getLatency(self, sql,sqlwithplan):
+    def getLatency(self, sql, sqlwithplan: str):
         """
         :param sql:a sqlSample object
         :return: the latency of sql
@@ -215,16 +216,26 @@ class ISQLWrapper(object):
         isql = shutil.which('isql')
         #isql = None
         if isql is None: 
-            isql = 'docker exec virtuoso-opensource /root/virtuoso-opensource/bin/isql' 
+            result_url: str = requests.post(
+                'http://127.0.0.1:4000/commands/isql', 
+                json={"args": [self.hostname, self.username, self.password, script]}
+            ).json()['result_url']
+
+            result = requests.get(result_url.replace('wait=false', 'wait=true')).json()
+            if result.get('report') is None:
+                raise NotImplementedError(f'Testing for ISQL: {result.get("error")}')
+            else:
+                return result.get("report")
             
-        cmd = (isql + f' {self.hostname} {self.username} {self.password} {script}').split(' ')
-        
-        process = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        if process.stderr:
-            raise ISQLWrapperException(process.stderr)
-        return process.stdout.decode('utf-8')
+        else:  
+            cmd = (isql + f' {self.hostname} {self.username} {self.password} {script}').split(' ')
+            
+            process = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            if process.stderr:
+                raise ISQLWrapperException(process.stderr)
+            return process.stdout.decode('utf-8')
 
     def execute_cmd(self, cmd: str):
         if not cmd.endswith(';'):
@@ -319,29 +330,27 @@ class ISQLRunner(DBRunner):
         end_time = time.time()
         afterCost = end_time - start_time
         return afterCost
-            
-    def getLatency(self, sql, sqlwithplan):        
-        #dp_cost = self._query_cost(sql, force_order=False)
-        #dp_latency = self._query_latency(sql, force_order=False)
 
+    def getLatency(self, sql,sqlwithplan):
+        """
+        :param sql:a sqlSample object
+        :return: the latency of sql
+        """
         if self.isCostTraining:
             return self.getCost(sql,sqlwithplan)
         global LatencyDict
         if self.isLatencyRecord:
             if sqlwithplan in LatencyDict:
                 return LatencyDict[sqlwithplan]
-
-        thisQueryCost = self._query_cost(sqlwithplan, force_order=True)
-        if thisQueryCost / sql.getDPCost() < 100:
+        
+        thisQueryCost = self.getCost(sql,sqlwithplan)
+        if thisQueryCost / sql.getDPCost()<100:
             try:
                 afterCost = self._query_latency(sqlwithplan, force_order=True)
-            except: 
-                afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(), sql.timeout())
-                raise "Something when wrong while executing query"
+            except:
+                afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
         else:
             afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
-            raise "Something when wrong while executing query"
-
         afterCost += 5
         if self.isLatencyRecord:
             LatencyDict[sqlwithplan] =  afterCost
@@ -351,19 +360,24 @@ class ISQLRunner(DBRunner):
         return afterCost
 
     def getCost(self, sql, sqlwithplan):
-        return self._query_cost(sqlwithplan, force_order=False)
+        return self._query_cost(sqlwithplan, force_order=True)
     
     def getSelectivity(self, table, whereCondition):
         global selectivityDict
         if whereCondition in selectivityDict:
             return selectivityDict[whereCondition]
 
-        totalQuery = f'SELECT * WHERE {{ {table} }}'
-        #print(self._explain(totalQuery, mode=-1))
-        total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(totalQuery, mode=-1)).group(1))
+        try:
+            totalQuery = f'SELECT * WHERE {{ {table} }}'
+            total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(totalQuery, mode=-1)).group(1))
+        except:
+            raise ValueError(f"Cannot execute query {totalQuery}.")
 
-        resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
-        select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(resQuery, mode=-1)).group(1))
+        try:
+            resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
+            select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(resQuery, mode=-1)).group(1))
+        except:
+            raise ValueError(f"Cannot execute query {resQuery}.")
 
         selectivityDict[whereCondition] = -log(select_rows/total_rows)
         return selectivityDict[whereCondition]

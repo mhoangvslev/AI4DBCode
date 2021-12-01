@@ -4,3 +4,10 @@ __pycache__
 data/
 
 backup/
+
+JOB-queries/**/*
+!JOB-queries/sparql/
+!JOB-queries/sql/
+models/
+
+Latency.json

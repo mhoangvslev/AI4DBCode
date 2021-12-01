@@ -6,3 +6,5 @@ git+https://github.com/JulienDavat/rdflib.git@rl-xp
 SPARQLWrapper==1.8.5
 pyparsing==2.4.7
 tqdm==4.62.3
+graphviz==0.18.2
+collections-extended==2.0.0

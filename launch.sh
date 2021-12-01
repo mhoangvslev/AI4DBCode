@@ -1,7 +1,10 @@
 #!/bin/bash
 
 syntax_error(){
-    echo "Syntax: sh launch.sh <start|build> <postgres|rtos-cpu|rtos-gpu> <sql|sparql>"
+    echo "Syntax: 
+    (1) Setup: sh launch.sh <start|build> <postgres|rtos-cpu|rtos-gpu>
+    (2) Train: sh launch.sh <cost-training|latency-tuning|train> <sql|sparql> [-debug]
+    "
 }
 
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
@@ -25,12 +28,15 @@ elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
         -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
         -e RTOS_ISQL_HOST="localhost" \
         -e RTOS_ISQL_PORT="8890" \
+        -e RTOS_PYTORCH_DEVICE="gpu" \
+        -e RTOS_JTREE_BUSHY=0 \
         -e RTOS_ENGINE="$3" \
-        -e VIRTUOSO_HOME="/virtuoso-opensource/" \
         --network host \
         -v $(realpath ./models):/workplace/models \
-        -v /virtuoso-opensource:/virtuoso-opensource \
+        -v $(realpath ./log):/workplace/log \
+        -v /tmp:/tmp \
         -p '5432:5432' \
+        -p '4000:4000' \
         ai4dbcode-rtos_rtos
 elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
     docker run -it --rm \
@@ -49,12 +55,15 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
         -e RTOS_ISQL_HOST="localhost" \
         -e RTOS_ISQL_PORT="8890" \
+        -e RTOS_PYTORCH_DEVICE="gpu" \
+        -e RTOS_JTREE_BUSHY=0 \
         -e RTOS_ENGINE="$3" \
-        -e VIRTUOSO_HOME="/virtuoso-opensource/" \
         --network host \
         -v $(realpath ./models):/workplace/models \
-        -v /virtuoso-opensource:/virtuoso-opensource \
+        -v $(realpath ./log):/workplace/log \
+        -v /tmp:/tmp \
         -p '5432:5432' \
+        -p '4000:4000' \
         ai4dbcode-rtos_rtos
 elif [ "$1" = "build" ]; then
     if [ "$2" = "postgres" -o "$2" = "rtos-cpu" -o "$2" = "rtos-gpu" ]; then
@@ -63,7 +72,9 @@ elif [ "$1" = "build" ]; then
         echo "Cannot build unknown target $2";
         exit 1;
     fi
-elif [ "$1" = "start" ]; then
+elif [ "$1" = "cost-training" ]; then
+    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
     RTOS_JOB_DIR="JOB-queries/$2$3" \
     RTOS_SCHEMA_FILE="schema.sql" \
     RTOS_DB_PASSWORD="123456" \
@@ -74,7 +85,47 @@ elif [ "$1" = "start" ]; then
     RTOS_ISQL_ENDPOINT="sparql" \
     RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
     RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
-    RTOS_ENGINE="$2" python CostTraining.py
+    RTOS_JTREE_BUSHY=0 \
+    RTOS_PYTORCH_DEVICE="cpu" \
+    RTOS_GV_FORMAT="png" \
+    RTOS_ENGINE="$2" \
+    python CostTraining.py
+elif [ "$1" = "latency-tuning" ]; then
+    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
+    RTOS_JOB_DIR="JOB-queries/$2$3" \
+    RTOS_SCHEMA_FILE="schema.sql" \
+    RTOS_DB_PASSWORD="123456" \
+    RTOS_DB_USER="postgres" \
+    RTOS_DB_NAME="imdbload" \
+    RTOS_DB_HOST="0.0.0.0" \
+    RTOS_DB_PORT="5432" \
+    RTOS_ISQL_ENDPOINT="sparql" \
+    RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
+    RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
+    RTOS_JTREE_BUSHY=0 \
+    RTOS_PYTORCH_DEVICE="cpu" \
+    RTOS_GV_FORMAT="png" \
+    RTOS_ENGINE="$2" \
+    python LatencyTuning.py
+elif [ "$1" = "train" ]; then
+    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
+    RTOS_JOB_DIR="JOB-queries/$2$3" \
+    RTOS_SCHEMA_FILE="schema.sql" \
+    RTOS_DB_PASSWORD="123456" \
+    RTOS_DB_USER="postgres" \
+    RTOS_DB_NAME="imdbload" \
+    RTOS_DB_HOST="0.0.0.0" \
+    RTOS_DB_PORT="5432" \
+    RTOS_ISQL_ENDPOINT="sparql" \
+    RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
+    RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
+    RTOS_JTREE_BUSHY=0 \
+    RTOS_PYTORCH_DEVICE="cpu" \
+    RTOS_GV_FORMAT="png" \
+    RTOS_ENGINE="$2" \
+    python train.py
 else
     syntax_error;
 fi

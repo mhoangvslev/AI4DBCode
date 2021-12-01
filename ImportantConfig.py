@@ -22,7 +22,6 @@ class Config:
         if os.environ["RTOS_ENGINE"] == "sparql":
             self.max_column_in_table = 15
             self.n_words = 2*len(open(os.path.join(self.JOBDir, 'relations.txt')).read().splitlines())
-
         else:
             self.max_column_in_table = 15
             self.n_words = 50

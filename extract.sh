@@ -1,8 +1,11 @@
 #!/bin/bash
 
-#awk -F"\n" '/Shortcuts/{while( $0 !~ "Attribute selection clauses" ){getline;print;}}' JOB-queries/sparql/* \
+syntax_error(){
+    echo "Syntax error:"
+    echo "sh extract.sh <relations|shortcuts|columns> path/to/workload"
+}
 
-if [ "$1" = "shortcut" ]; then
+if [ "$1" = "shortcuts" ]; then
     sed -n '/Shortcuts/,/2/{p;/^Attribute selection pattern/q}' $(realpath $2)/*.sparql \
         | grep -Po '<[\w\:\/\.\#]+>' \
         | sed "s/[<>]//g" \
@@ -21,4 +24,6 @@ elif [ "$1" = "columns" ]; then
         | sed "s/[<>]//g" \
         | sort \
         | uniq 
+else
+    syntax_error;
 fi

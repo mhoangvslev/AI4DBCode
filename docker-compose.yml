@@ -17,6 +17,21 @@ services:
       - postgresVolume:/var/lib/postgresql/data   
     ports:
       - "5432:5432"
+
+  virtuoso:
+    container_name: virtuoso
+    image: "minhhoangdang/virtuoso-csopts:latest"
+    environment:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    ports:
+      - '8890:8890'
+      - '1111:1111'
+      - '4000:4000'
+    volumes:
+      - '/virtuoso-opensource/database:/root/virtuoso-opensource/database'
+      - '/tmp:/tmp'
+    command: bash -c "./virtuoso-t +configfile ../database/virtuoso.ini && flask run --host=0.0.0.0 --port=4000"
     
   rtos:
     depends_on: 
@@ -37,7 +52,12 @@ services:
       RTOS_DB_NAME: "imdbload"
       RTOS_DB_HOST: "postgresql://${RTOS_DB_USER}:${RTOS_DB_PASSWORD}@postgres/${RTOS_DB_NAME}"
       RTOS_DB_PORT: "5433"
+      RTOS_JTREE_BUSHY: 0 
       RTOS_ENGINE: "sparql"
+    volumes:
+      - ./models:/workplace/models
+      - ./log:/workplace/log 
+      - /tmp:/tmp
     networks: [ postgresNetwork ]
     #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "python CostTraining.py"'
 

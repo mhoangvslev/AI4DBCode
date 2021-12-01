@@ -1,8 +1,11 @@
+from posixpath import join
+from typing import Dict, List, Set, Tuple, Union
+from collections_extended.setlists import SetList
 
-from typing import List
+from torch.functional import Tensor
 from ImportantConfig import Config
 from utils.DBUtils import DBRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, TargetTableISQL, TargetTableSQL
+from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL
 from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
@@ -14,11 +17,13 @@ from itertools import count
 import numpy as np
 from psqlparse import parse_dict
 import os
+import graphviz as gv
+from collections_extended import setlist
 
 config = Config()
 
 class sqlInfo:
-    def __init__(self, runner ,sql ,filename):
+    def __init__(self, runner: DBRunner, sql: str, filename: str):
         self.DPLantency = None
         self.DPCost = None
         self.bestLatency = None
@@ -58,7 +63,8 @@ class JoinTree:
     """
     def __init__(self, sqlt: sqlInfo, db_info: DB, runner: DBRunner, device):
         global tree_lstm_memory
-        tree_lstm_memory  ={}
+        self.nbFilters = 0
+        tree_lstm_memory = {}
         self.sqlt = sqlt
         self.sql = self.sqlt.sql
 
@@ -66,6 +72,9 @@ class JoinTree:
         self.runner = runner
         self.device = device
         self.aliasname2fromtable={}
+
+        format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
+        self.join_tree_repr = gv.Digraph(format=format, graph_attr={"rankdir": "TB"})
 
         print(self.sqlt.filename, self.sql)
 
@@ -77,9 +86,11 @@ class JoinTree:
             for table in self.from_table_list:
                 self.aliasname2fromtable[table.getAliasName()] = table
                 self.aliasname2fullname[table.getAliasName()] = table.getFullName()
-            self.aliasnames = set(self.aliasname2fromtable.keys())
+            self.aliasnames = setlist(self.aliasname2fromtable.keys())
             self.comparison_list =[ComparisonSQL(x) for x in parse_result["whereClause"]["BoolExpr"]["args"]]
-            self.aliasnames_root_set = set([x.getAliasName() for x in self.from_table_list])
+            self.aliasnames_root_set = setlist([x.getAliasName() for x in self.from_table_list])
+
+            print(self.comparison_list)
 
         else:
             """
@@ -125,16 +136,12 @@ class JoinTree:
                - A SQL "column" corresponds to either "subject" or "predicate" in SPARQL.
             """
 
-            def get_joins(tps):
+            def get_joins(tps: List[Dict[str, str]]) -> Dict[str, JoinISQL]:
+                equal_comparisons = {}
 
-                from_tables = []
-                target_tables = []
-                other_tables = []
-                all_joins = {}
-
-                subjects = []
-                predicates = []
-                objects = []
+                subjects: List[str] = []
+                predicates: List[str] = []
+                objects: List[str] = []
                 for tp in tps:
                     s, p, o = tp['subject'], tp['predicate'], tp['object']
                     subjects.append(s)
@@ -142,78 +149,150 @@ class JoinTree:
                     objects.append(o)
                 
                 for i, (s_i, p_i, o_i) in enumerate(zip(subjects, predicates, objects)):
-                    other_tables.append(DummyTableISQL(s_i, p_i, o_i))
                     for j, (s_j, p_j, o_j) in enumerate(zip(subjects, predicates, objects)):
                         if i == j: continue
+
+                        """There are 4 type of joins in sparql
+                        subject-object (path join): 
+                            - form: "(?s1 ?p1 ?o1). (?s2 ?p2 ?s1)"
+                        subject-subject (star join): 
+                            - form: "(?s1 ?p1 ?o1). (?s1 ?p2 ?o2)"
+                        object-object (star join): 
+                            - form: "(?s1 ?p1 ?o1). (?s2 ?p2 ?o1)"
+                        object-subject (path join): 
+                            - form: "(?s1 ?p1 ?o1). (?o1 ?p2 ?s2)"
+                        """
+
                         if s_i == o_j:
-                            from_tables.append(FromTableISQL(s_j, p_j, o_j))
-                            target_tables.append(TargetTableISQL(s_i, p_i, o_i))
-                            all_joins[f"{p_j} |><| {p_i} ({ o_j })"] = {
+                            # from_table: fromOther fromTable joinCol
+                            # target_table: joinCol targetTable targetOther
+                            equal_comparisons[f"{p_j} |><| {p_i} ({ o_j })"] = JoinISQL({
                                 "fromTable": p_j,
                                 "targetTable": p_i,
-                                "joinCol": o_j,
+                                "joinCol": s_i,
                                 "fromOtherCol": s_j,
-                                "targetOtherCol": o_i
-                            }
-                        
-                        if o_i == s_j:
-                            from_tables.append(FromTableISQL(s_i, p_i, o_i))
-                            target_tables.append(TargetTableISQL(s_j, p_j, o_j))
-                            all_joins[f"{p_i} |><| {p_j} ({ o_i })"] = {
+                                "targetOtherCol": o_i,
+                                "type": "so"
+                            })
+
+                        if s_i == s_j:
+                            # from_table: joinCol fromTable fromOther
+                            # target_table: joinCol targetTable targetOther
+                            equal_comparisons[f"{p_i} |><| {p_j} ({ s_i })"] = JoinISQL({
+                                "fromTable": p_i,
+                                "targetTable": p_j,
+                                "joinCol": s_j,
+                                "fromOtherCol": o_i,
+                                "targetOtherCol": o_j,
+                                "type": "ss"
+                            })
+
+                            equal_comparisons[f"{p_j} |><| {p_i} ({ s_j })"] = JoinISQL({
+                                "fromTable": p_j,
+                                "targetTable": p_i,
+                                "joinCol": s_i,
+                                "fromOtherCol": o_j,
+                                "targetOtherCol": o_i,
+                                "type": "ss"
+                            })
+
+                        if o_i == o_j and o_i.startswith("?"):
+                            # from_table: fromOther fromTable joinCol
+                            # target_table: targetOther targetTable joinCol
+                            equal_comparisons[f"{p_i} |><| {p_j} ({ o_i })"] = JoinISQL({
                                 "fromTable": p_i,
                                 "targetTable": p_j,
                                 "joinCol": o_i,
                                 "fromOtherCol": s_i,
-                                "targetOtherCol": o_j
-                            }
-                    
-                return list(set(from_tables)), list(set(target_tables)), list(set(other_tables)), all_joins
+                                "targetOtherCol": s_j,
+                                "type": "oo"
+                            })
 
+                            equal_comparisons[f"{p_j} |><| {p_i} ({ o_j })"] = JoinISQL({
+                                "fromTable": p_j,
+                                "targetTable": p_i,
+                                "joinCol": o_j,
+                                "fromOtherCol": s_j,
+                                "targetOtherCol": s_i,
+                                "type": "oo"
+                            })
+                        
+                        if o_i == s_j:
+                            # from_table: fromOther fromTable joinCol
+                            # target_table: joinCol targetTable targetOther
+                            equal_comparisons[f"{p_i} |><| {p_j} ({ o_i })"] = JoinISQL({
+                                "fromTable": p_i,
+                                "targetTable": p_j,
+                                "joinCol": o_i,
+                                "fromOtherCol": s_i,
+                                "targetOtherCol": o_j,
+                                "type": "os"
+                            })
+                    
+                return equal_comparisons
 
             parse_result: ParsedQuery = QueryParser.parse(self.sql)
             #print(parse_result.triple_patterns)
             #print(parse_result.filters)
-            self.from_table_list, self.target_table_list, self.other_table_list, self.all_joins = get_joins(parse_result.triple_patterns)
-
-            all_join_tables = list(set(self.from_table_list + self.target_table_list + self.other_table_list))
+            self.all_joins_list = get_joins(parse_result.triple_patterns)
             
-            for table in all_join_tables:
+            self.from_table_list = setlist(map(lambda join: join.getFromTable(), self.all_joins_list.values()))
+            self.target_table_list = setlist(map(lambda join: join.getTargetTable(), self.all_joins_list.values()))
+            
+            self.all_table_list = self.from_table_list | self.target_table_list
+            print(f"There are {len(parse_result.triple_patterns)} triple patterns, {len(self.from_table_list)} from, {len(self.target_table_list)} target")
+            
+            tp_set = setlist(map(lambda tp: f'{tp["subject"]} <{tp["predicate"]}> {tp["object"]}', parse_result.triple_patterns))
+            all_table_set = setlist(map(lambda table: str(table), self.all_table_list))
+            if len(all_table_set - tp_set) != 0:
+                raise ValueError(f"The following triple pattern does not exist: {all_table_set - tp_set}")
+
+            for table in self.all_table_list :
                 self.aliasname2fromtable[table.getAliasName()] = table
                 self.aliasname2fullname[table.getAliasName()] = table.getFullName()
-                #print(db_info.name2table.keys())
                 db_info.name2table[table.getFullName()].updateTable(table)
 
-            self.aliasnames = set(self.aliasname2fromtable.keys())
-            self.comparison_list = [ComparisonISQL(x) for x in parse_result.filters]
-            for join_name, join in self.all_joins.items():
+            self.aliasnames = setlist(self.aliasname2fromtable.keys())
+            self.comparison_list = list()
+            self.comparison_list.extend([ComparisonISQL(x) for x in parse_result.filters])
+            print(f"There are {len(self.comparison_list)}/{len(parse_result.filters)} filter items: {self.comparison_list}")
+
+            # Add equal comparison, albeit to a literal or a variable (join)
+            for join_name, join in self.all_joins_list.items():
                 eq_comp = ComparisonISQLEqual(join_name, join).breakdown()
                 self.comparison_list.extend(eq_comp)
-            self.aliasnames_root_set = set([x.getAliasName() for x in all_join_tables])
 
+            print(f"There are {len(self.comparison_list)} comparisons")
+            print('\n'.join(map(str, self.comparison_list)))
+
+            self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
 
         self.db_info = db_info
-        self.join_list = {}
-        self.filter_list = {}
+        self.join_list: Dict[ str, List[Tuple[str, str]] ] = {}
+        self.filter_list: Dict[str, List[ComparisonISQL]] = {}
+
+        """ The join tree has dual presentation, one for the name and one for alias. Both tree are updated at the same time in the same way.
+        """
 
         self.aliasnames_fa = {}
-        self.aliasnames_set = {}
-        self.aliasnames_join_set = {}
-        self.left_son = {}
-        self.right_son = {}
+        self.aliasnames_set: Dict[str, setlist] = {}
+        self.aliasnames_join_set: Dict[str, setlist] = {}
+        self.left_son: Dict[int, str] = {}
+        self.right_son: Dict[int, str] = {}
         self.total = 0
-        self.left_aliasname = {}
-        self.right_aliasname = {}
+        self.left_aliasname: Dict[int, str] = {}
+        self.right_aliasname: Dict[int, str] = {}
 
+        # Initialize feature set F
         self.table_fea_set = {}
-
-        # Extract all Join and filters
         for aliasname in self.aliasnames_root_set:
             self.table_fea_set[aliasname] = [0.0]*config.max_column_in_table*2
-
-        self.join_candidate = set()
-        self.join_matrix=[]
-        for aliasname in self.aliasnames_root_set:
             self.join_list[aliasname] = []
+
+        self.join_candidate: Set[Tuple[str, str]] = setlist()
+        self.join_matrix = []
+
+        # Initialize M matrix
         for idx in range(len(self.db_info)):
             self.join_matrix.append([0]*len(self.db_info))
             
@@ -223,7 +302,7 @@ class JoinTree:
 
             """
 
-            # When the aliases are present on in to operands, 
+            # When the aliases are present on 2 operands, 
             if len(comparison.aliasname_list) == 2:
 
                 left_aliasname = comparison.aliasname_list[0]
@@ -329,11 +408,8 @@ class JoinTree:
                 idx1 = self.db_info.name2idx[right_fullname]
                 self.join_matrix[idx0][idx1] = 1
                 self.join_matrix[idx1][idx0] = 1
-            else:
-                try: 
-                    left_aliasname = comparison.aliasname_list[0]
-                except IndexError:
-                    raise IndexError(f"Error while parsing {comparison}. Alias list: {comparison.aliasname_list}")
+            else: 
+                left_aliasname = comparison.aliasname_list[0]
                     
                 if os.environ['RTOS_ENGINE'] == "sparql":
                     tmp = list(filter(lambda x: left_aliasname in x, self.aliasname2fullname.keys()))
@@ -383,10 +459,10 @@ class JoinTree:
 
         for aliasname in self.aliasnames_root_set:
             self.table_fea_set[aliasname] = torch.tensor(self.table_fea_set[aliasname],device = self.device).reshape(1,-1).detach()
-            self.aliasnames_set[aliasname] = set([aliasname])
+            self.aliasnames_set[aliasname] = setlist([aliasname])
             for y in self.join_list[aliasname]:
                 if aliasname not in self.aliasnames_join_set:
-                    self.aliasnames_join_set[aliasname] = set()
+                    self.aliasnames_join_set[aliasname] = setlist()
                 self.aliasnames_join_set[aliasname].add(y[0])
 
 
@@ -452,24 +528,37 @@ class JoinTree:
         self.aliasnames_fa = {}
         self.left_son = {}
         self.right_son = {}
-        self.aliasnames_root_set = set([x.getAliasName() for x in self.from_table_list])
+
+        if os.environ['RTOS_ENGINE'] == "sql":
+            self.aliasnames_root_set = setlist([x.getAliasName() for x in self.from_table_list])
+        else:
+            self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
 
         self.left_aliasname  = {}
         self.right_aliasname =  {}
         self.aliasnames_join_set = {}
         for aliasname in self.aliasnames_root_set:
-            self.aliasnames_set[aliasname] = set([aliasname])
+            self.aliasnames_set[aliasname] = setlist([aliasname])
             for y in self.join_list[aliasname]:
                 if aliasname not in self.aliasnames_join_set:
-                    self.aliasnames_join_set[aliasname] = set()
+                    self.aliasnames_join_set[aliasname] = setlist()
                 self.aliasnames_join_set[aliasname].add(y[0])
 
         self.total = 0
-    def findFather(self,node_name):
+
+    def findFather(self,node_name: str) -> str:
+        """Retrieve the farthest ascendant of the given node
+
+        Args:
+            node_name (str): [description]
+
+        Returns:
+            str: [description]
+        """
         fa_name = node_name
-        while  fa_name in self.aliasnames_fa:
+        while fa_name in self.aliasnames_fa.keys():
             fa_name = self.aliasnames_fa[fa_name]
-        while  node_name in self.aliasnames_fa:
+        while node_name in self.aliasnames_fa.keys():
             temp_name = self.aliasnames_fa[node_name]
             self.aliasnames_fa[node_name] = fa_name
             node_name = temp_name
@@ -486,6 +575,7 @@ class JoinTree:
 
         self.left_aliasname[self.total] = aliasname_left
         self.right_aliasname[self.total] = aliasname_right
+        
         if not fake:
             self.aliasnames_set[self.total] = self.aliasnames_set[aliasname_left_fa]|self.aliasnames_set[aliasname_right_fa]
             self.aliasnames_join_set[self.total] = (self.aliasnames_join_set[aliasname_left_fa]|self.aliasnames_join_set[aliasname_right_fa])-self.aliasnames_set[self.total]
@@ -494,94 +584,115 @@ class JoinTree:
 
         self.total += 1
 
-    def recTableISQL(self,node) -> str:
-        res = []
+    def recTableISQL(self,node: Union[int, str]) -> Union[int, List[str]]:
+        """Recursively construct sparql query from a given node.
+        Args:
+            node (Union[int, str]): a position in the tree or the join candidate
+
+        Returns:
+            Union[int, List[str]]: list of elected candidates or a pointer to the next batch of candidates
+        """
+
+        # Node is int means that it's a root node
+        if isinstance(node,int):
+
+            res = setlist()
+
+            left_son = self.left_son[node]
+            right_son = self.right_son[node]
+
+            self.join_tree_repr.node(str(hash(node)), str(node))
+            self.join_tree_repr.node(str(hash(left_son)), str(left_son))
+            self.join_tree_repr.node(str(hash(right_son)), str(right_son))
+
+            leftRes = self.recTableISQL(left_son)
+            self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
+            res.update(leftRes)
+            
+            filter_list = []
+            on_list = []
+            if left_son in self.filter_list.keys():
+                for condition in self.filter_list[left_son]:
+                    filter_list.append(condition.toString())
+        
+            if right_son in self.filter_list.keys() :
+                for condition in self.filter_list[right_son]:
+                    filter_list.append(condition.toString())
+
+            cpList = []
+            joined_aliasname = setlist([self.left_aliasname[node],self.right_aliasname[node]])
+            for left_table in self.aliasnames_set[left_son]:
+                for right_table, comparison in self.join_list[left_table]:
+                    if right_table in self.aliasnames_set[right_son]:
+                        left_aliasname, right_aliasname = comparison.aliasname_list[0], comparison.aliasname_list[1]
+                        if ( left_aliasname in joined_aliasname and right_aliasname in joined_aliasname):
+                            cpList.append(comparison.toString())
+                        else:
+                            on_list.append(comparison.toString())
+            
+            rightRes = self.recTableISQL(right_son)
+            self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
+            res.update(rightRes)
+
+            # inner join
+            if len(filter_list + on_list + cpList) > 0:
+                res.update(cpList + on_list + filter_list)
+
+            return res
+        else:
+            return [str(self.aliasname2fromtable[node])]
+
+    def recTableSQL(self,node):
         if isinstance(node,int):
 
             left_son = self.left_son[node]
             right_son = self.right_son[node]
 
-            leftRes = self.recTableISQL(left_son)
-            if left_son not in self.aliasnames:
-                #raise ValueError(f"Left child {left_son}({leftRes}) not in {self.aliasnames}")
-                #leftRes = leftRes.splitlines()[-1]
-                res.extend(leftRes.splitlines())
-            else:
-                res.append(leftRes)
-
-            # Immediately follows by filters
-            filter_list = []
-            on_list = []
-            if left_son in self.filter_list:
-                for condition in self.filter_list[left_son]:
-                    filter_list.append(condition.toString())
-
-            if right_son in self.filter_list :
-                for condition in self.filter_list[right_son]:
-                    filter_list.append(condition.toString())
-            
-            # ... then comparisons
-            cpList = []
-            joined_aliasname = set([self.left_aliasname[node],self.right_aliasname[node]])
-            for left_table in self.aliasnames_set[left_son]:
-                for right_table, comparison in self.join_list[left_table]:
-                    if right_table in self.aliasnames_set[right_son]:
-                        if (comparison.aliasname_list[1] in joined_aliasname and comparison.aliasname_list[0] in joined_aliasname):
-                            cpList.append(comparison.toString())
-                        else:
-                            on_list.append(comparison.toString())
-            
-            # inner join
-            if len(filter_list + on_list + cpList) > 0:
-                res.append(self.recTableISQL(right_son))
-                res.extend(cpList + on_list + filter_list)
-            
-            # cross join
-            else:
-                res.append(self.recTableISQL(right_son))
-
-            return "\n".join(res)
-
-        elif isinstance(node, str):
-            return node
-        else:
-            raise NotImplementedError(f'Cannot handle node of unknown type {type(node)}')
-
-    def recTableSQL(self,node):
-        if isinstance(node,int):
             res =  "("
-            leftRes = self.recTableSQL(self.left_son[node])
-            if not self.left_son[node] in self.aliasnames:
+            leftRes = self.recTableSQL(left_son)
+            if not left_son in self.aliasnames:
                 leftRes = leftRes[1:-1]
+
+            self.join_tree_repr.node(str(hash(node)), str(node))
+            self.join_tree_repr.node(str(hash(left_son)), str(left_son))
+            self.join_tree_repr.node(str(hash(right_son)), str(right_son))
+
+            self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
 
             res += leftRes + "\n"
             filter_list = []
             on_list = []
-            if self.left_son[node] in self.filter_list:
-                for condition in self.filter_list[self.left_son[node]]:
+            if left_son in self.filter_list:
+                for condition in self.filter_list[left_son]:
                     filter_list.append(str(condition))
 
-            if self.right_son[node] in self.filter_list :
-                for condition in self.filter_list[self.right_son[node]]:
+            if right_son in self.filter_list :
+                for condition in self.filter_list[right_son]:
                     filter_list.append(str(condition))
 
             cpList = []
-            joined_aliasname = set([self.left_aliasname[node],self.right_aliasname[node]])
-            for left_table in self.aliasnames_set[self.left_son[node]]:
+            joined_aliasname = setlist([self.left_aliasname[node],self.right_aliasname[node]])
+            for left_table in self.aliasnames_set[left_son]:
                 for right_table,comparison in self.join_list[left_table]:
-                    if right_table in self.aliasnames_set[self.right_son[node]]:
-                        if (comparison.aliasname_list[1] in joined_aliasname and comparison.aliasname_list[0] in joined_aliasname):
+                    if right_table in self.aliasnames_set[right_son]:
+                        left_aliasname, right_aliasname = comparison.aliasname_list[0], comparison.aliasname_list[1]
+                        if ( left_aliasname in joined_aliasname and right_aliasname in joined_aliasname):
                             cpList.append(str(comparison))
                         else:
                             on_list.append(str(comparison))
+
+            rightRes = self.recTableSQL(right_son)
+            
             if len(filter_list+on_list+cpList)>0:
                 res += "inner join "
-                res += self.recTableSQL(self.right_son[node])
+                res += rightRes
                 res += "\non "
-                res += " AND ".join(cpList + on_list+filter_list)
+                res += " AND ".join(cpList + on_list + filter_list)
             else:
                 res += "cross join "
-                res += self.recTableSQL(self.right_son[node])
+                res += rightRes
+
+            self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
 
             res += ")"
             return res
@@ -632,6 +743,7 @@ class JoinTree:
             return res
         encoding, _ = encode_node(node_idx)
         return encoding
+
     def encode_tree_fold(self,fold, node_idx):
         def get_inputX(node):
             left_aliasname = self.left_aliasname[node]
@@ -654,7 +766,12 @@ class JoinTree:
         encoding, _ = encode_node(node_idx)
         return encoding
 
-    def toSql(self):
+    def toSql(self) -> str:
+        """Convert this join tree to executable query
+
+        Returns:
+            str: executable query string for in SQL or in SPARQL
+        """
         root = self.total - 1
         print(f"Root: {root}")
 
@@ -664,16 +781,25 @@ class JoinTree:
             res += ";"
         else:
             res = "SELECT * WHERE { \n\t" 
-            res += ' .\n\t'.join(set(self.recTableISQL(root).splitlines()))
+            res += ' .\n\t'.join(self.recTableISQL(root))
             res += "\n};"
+
+        # Graphviz
+        # fn = os.path.basename(self.sqlt.filename).split('.')[0]
+        # self.join_tree_repr.render(os.path.join(config.JOBDir, fn, f"{fn}_{hash(self)}.gv"))
 
         print("Proposed plan:")
         print(res)
+
         return res
 
     def plan2Cost(self):
-        sql = self.toSql()
-        return self.runner.getLatency(self.sqlt, sql)
+        self.proposedPlan = self.toSql()
+        return self.runner.getLatency(self.sqlt, self.proposedPlan)
+
+    @property
+    def plan(self):
+        return self.proposedPlan
 
 
 

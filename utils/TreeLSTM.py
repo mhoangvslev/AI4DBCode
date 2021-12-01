@@ -1,4 +1,5 @@
 import torch
+from torch.functional import Tensor
 from torch.nn import init
 import torchfold
 import torch.nn as nn
@@ -84,7 +85,8 @@ class SPINN(nn.Module):
         return self.tree_lstm((left_h, left_c), (right_h, right_c),inputX)
     def root(self,tree_list):
         return self.tree_root(tree_list).view(-1,self.size)
-    def logits(self, encoding,join_matrix):
+    
+    def logits(self, encoding: Tensor, join_matrix: Tensor) -> Tensor :
         encoding = self.root(encoding.view(1,-1,self.size))
         matrix = self.relu(self.outFc(join_matrix))
         outencoding = torch.cat([encoding,matrix],dim = 1)

@@ -1,4 +1,5 @@
 
+from typing import List, Tuple
 from utils.DBUtils import PGRunner, ISQLRunner
 from utils.sqlSample import sqlInfo
 import numpy as np
@@ -15,11 +16,13 @@ from torch.nn import init
 from ImportantConfig import Config
 import os
 from tqdm import tqdm
+import graphviz as gv
+import pandas as pd
 
 config = Config()
 
-#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if os.environ['RTOS_PYTORCH_DEVICE'] == "gpu" else torch.device("cpu")
+#device = torch.device("cpu")
 
 with open(config.schemaFile, "r") as f:
     createSchema = "".join(f.readlines())
@@ -80,7 +83,7 @@ runner = (
 
 dqn = DQN(policy_net,target_net,db_info,runner,device)
 
-def k_fold(input_list,k,ix = 0):
+def k_fold(input_list: List[sqlInfo],k,ix = 0) -> Tuple[List[sqlInfo], List[sqlInfo]]:
     li = len(input_list)
     kl = (li-1)//k + 1
     train = []
@@ -91,10 +94,10 @@ def k_fold(input_list,k,ix = 0):
             validate.append(input_list[idx])
         else:
             train.append(input_list[idx])
-    return train,validate
+    return train, validate
 
 
-def QueryLoader(QueryDir):
+def QueryLoader(QueryDir: str) -> List[sqlInfo]:
     def file_name(file_dir):
         import os
         L = []
@@ -112,7 +115,7 @@ def QueryLoader(QueryDir):
             sql_list.append(sqlInfo(runner,one_sql,filename))
     return sql_list
 
-def resample_sql(sql_list):
+def resample_sql(sql_list: List[sqlInfo]):
     rewards = []
     reward_sum = 0
     rewardsP = []
@@ -150,21 +153,25 @@ def resample_sql(sql_list):
                 res_sql.append(rewards[ts][1])
                 break
     return res_sql+sql_list
-def train(trainSet,validateSet):
+
+def train(trainSet: List[sqlInfo], validateSet: List[sqlInfo]):
 
     trainSet_temp = trainSet
     losses = []
     startTime = time.time()
-    print_every = 20
+    print_every = 10
     TARGET_UPDATE = 3
     for i_episode in tqdm(range(0,10000), unit="episode"):
         if i_episode % 200 == 100:
             print("Resampling training set...")
             trainSet = resample_sql(trainSet_temp)
         #     sql = random.sample(train_list_back,1)[0][0]
-        sqlt: sqlInfo = random.sample(trainSet[0:],1)[0]
+        sqlt = random.sample(trainSet[0:],1)[0]
         env = ENV(sqlt,db_info,runner,device)
         pg_cost = sqlt.getDPlatency()
+
+        format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
+        decision_tree = gv.Digraph(format=format, graph_attr={"rankdir": "LR"})
 
         previous_state_list = []
         action_this_epi = []
@@ -174,7 +181,11 @@ def train(trainSet,validateSet):
         for t in tqdm(count()):
             # beginTime = time.time();
             action_list, chosen_action, all_action = dqn.select_action(env,need_random=nr)
-            print(action_list, chosen_action)
+
+            # for act in action_list:
+            #     decision_tree.node(str(hash(act)), str(act))
+
+            print(f"Action list: {action_list}, chosen action: {chosen_action}")
             value_now = env.selectValue(policy_net)
             next_value = torch.min(action_list).detach()
             # e1Time = time.time()
@@ -187,6 +198,9 @@ def train(trainSet,validateSet):
             right = chosen_action[1]
             env.takeAction(left,right)
             action_this_epi.append((left,right))
+
+            # fn = os.path.basename(sqlt.filename).split('.')[0]
+            # decision_tree.render(os.path.join(config.JOBDir, fn, f"{fn}_dtree_{t}.gv"))
 
             reward, done = env.reward()
             reward = torch.tensor([reward], device=device, dtype = torch.float32).view(-1,1)
@@ -227,8 +241,16 @@ def train(trainSet,validateSet):
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
                     print("###################### Epoch",i_episode//print_every,pg_cost)
-                    val_value = dqn.validate(validateSet)
-                    print("time",time.time()-startTime)
+                    
+                    mrc, gmrl = dqn.validate(validateSet)
+                    training_time = time.time()-startTime
+
+                    fn = os.path.join(Config().JOBDir, "validation.csv")
+                    pd.DataFrame(
+                        [[i_episode+1, training_time, mrc, gmrl, pg_cost]], 
+                        columns=["episode", "training_time", "mrc", "gmrl", "pg_cost"]
+                    ).to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                    print("time", training_time)
                     print("~~~~~~~~~~~~~~")
                 break
         if i_episode % TARGET_UPDATE == 0:

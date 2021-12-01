@@ -13,11 +13,13 @@ import copy
 import torch
 from torch.nn import init
 from ImportantConfig import Config
+import os
+
 
 config = Config()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if os.environ['RTOS_PYTORCH_DEVICE'] == "gpu" else torch.device("cpu")
+#device = torch.device("cpu")
 
 with open(config.schemaFile, "r") as f:
     createSchema = "".join(f.readlines())
@@ -26,8 +28,22 @@ db_info = DB(createSchema)
 
 featureSize = 128
 
-policy_net = SPINN(n_classes = 1, size = featureSize, n_words = 50,mask_size= len(db_info)*len(db_info),device=device).to(device)
-target_net = SPINN(n_classes = 1, size = featureSize, n_words = 50,mask_size= len(db_info)*len(db_info),device=device).to(device)
+policy_net = SPINN(
+    n_classes = 1, size = featureSize, 
+    n_words = config.n_words,
+    mask_size= len(db_info)*len(db_info),
+    device=device, 
+    max_column_in_table=config.max_column_in_table
+).to(device)
+
+target_net = SPINN(
+    n_classes = 1, size = featureSize, 
+    n_words = config.n_words, 
+    mask_size= len(db_info)*len(db_info),
+    device=device, 
+    max_column_in_table=config.max_column_in_table
+).to(device)
+
 for name, param in policy_net.named_parameters():
     print(name,param.shape)
     if len(param.shape)==2:
@@ -208,7 +224,7 @@ def train(trainSet,validateSet):
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
                     print("###################### Epoch",i_episode//print_every,pg_cost)
-                    val_value = dqn.validate(validateSet)
+                    mrc, gmrl = dqn.validate(validateSet)
                     print("time",time.time()-startTime)
                     print("~~~~~~~~~~~~~~")
                 break
@@ -218,7 +234,7 @@ def train(trainSet,validateSet):
 if __name__=='__main__':
     sytheticQueries = QueryLoader(QueryDir=config.sytheticDir)
     # print(sytheticQueries)
-    JOBQueries = QueryLoader(QueryDir=f'{config.JOBDir}/{os.environ["RTOS_ENGINE"]}')
+    JOBQueries = QueryLoader(config.JOBDir)
     Q4,Q1 = k_fold(JOBQueries,10,1)
     # print(Q4,Q1)
     train(Q4+sytheticQueries,Q1)

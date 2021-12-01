@@ -18,3 +18,5 @@ psqlparse = "1.0rc7"
 psycopg2-binary = { version = "2.8.6", optional = true }
 pyparsing = "2.4.7"
 tqdm = "4.62.3"
+graphviz = "^0.18.2"
+collections-extended = "^2.0.0"
