@@ -135,9 +135,13 @@ def resample_sql(sql_list: List[sqlInfo]):
 
             reward, done = env.reward()
             if done:
-                mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
-                rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
-                mes += reward*log(1.5)-log(pg_cost)
+                # mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
+                # rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
+                # mes += reward*log(1.5)-log(pg_cost)
+
+                mrc = max(reward/pg_cost-1, 0)
+                rewardsP.append(np.exp(log(reward)-log(pg_cost)))
+                mes += log(reward)-log(pg_cost)
                 rewards.append((mrc,sql))
                 reward_sum += mrc
                 break
@@ -240,7 +244,7 @@ def train(trainSet: List[sqlInfo], validateSet: List[sqlInfo]):
                 losses.append(loss)
                 if ((i_episode + 1)%print_every==0):
                     print(np.mean(losses))
-                    print("###################### Epoch",i_episode//print_every,pg_cost)
+                    print("###################### Epoch", i_episode//print_every,pg_cost)
                     
                     mrc, gmrl = dqn.validate(validateSet)
                     training_time = time.time()-startTime

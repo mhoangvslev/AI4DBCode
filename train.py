@@ -131,12 +131,17 @@ def resample_sql(sql_list):
 
             reward, done = env.reward()
             if done:
-                mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
-                rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
-                mes += reward*log(1.5)-log(pg_cost)
+                # mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
+                # rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
+                # mes += reward*log(1.5)-log(pg_cost)
+
+                mrc = max(reward/pg_cost-1, 0)
+                rewardsP.append(np.exp(log(reward)-log(pg_cost)))
+                mes += log(reward)-log(pg_cost)
                 rewards.append((mrc,sql))
                 reward_sum += mrc
                 break
+            
     import random
     print(rewardsP)
     res_sql = []

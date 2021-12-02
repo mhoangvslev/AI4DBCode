@@ -13,7 +13,6 @@ import requests
 from math import log
 from SPARQLWrapper import SPARQLWrapper, JSON
 
-
 class PGConfig:
     def __init__(self):
         self.keepExecutedPlan =True
@@ -59,14 +58,14 @@ class DBRunner:
         """
         import time
         startTime = time.time()
-        cost = self.getCost(sql,sqlwithplan)
+        cost = self.getCost(sql,sqlwithplan, force_order=False)
         plTime = time.time()-startTime
         return plTime
 
-    def getLatency(self, sql, sqlwithplan):
+    def getLatency(self, sql, sqlwithplan, force_order=False):
         raise NotImplementedError()
     
-    def getCost(self, sql, sqlwithplan: str):
+    def getCost(self, sql, sqlwithplan: str, force_order=False):
         raise NotImplementedError()    
 
     def getSelectivity(self,table,whereCondition):
@@ -93,13 +92,13 @@ class PGRunner(DBRunner):
         self._port = port
         self.config = PGConfig()
         
-    def getLatency(self, sql, sqlwithplan: str):
+    def getLatency(self, sql, sqlwithplan: str, force_order=False):
         """
         :param sql:a sqlSample object
         :return: the latency of sql
         """
         if self.isCostTraining:
-            return self.getCost(sql,sqlwithplan)
+            return self.getCost(sql,sqlwithplan,force_order=force_order)
         global LatencyDict
         if self.isLatencyRecord:
             if sqlwithplan in LatencyDict:
@@ -113,13 +112,15 @@ class PGRunner(DBRunner):
         )
         cursor = conn.cursor()
 
-        cursor.execute("set join_collapse_limit = 1;")
+        if force_order:
+            cursor.execute("set join_collapse_limit = 1;")
+
         cursor.execute("SET statement_timeout = "+str(int(sql.timeout()))+ ";")
         cursor.execute("set max_parallel_workers=1;")
         cursor.execute("set max_parallel_workers_per_gather = 1;")
         cursor.execute("set geqo_threshold = 20;")
         cursor.execute("EXPLAIN "+sqlwithplan)
-        thisQueryCost = self.getCost(sql,sqlwithplan)
+        thisQueryCost = self.getCost(sql,sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost()<100:
             try:
                 cursor.execute("EXPLAIN ANALYZE "+sqlwithplan)
@@ -139,7 +140,7 @@ class PGRunner(DBRunner):
             LatencyRecordFileHandle.flush()
         return afterCost
 
-    def getCost(self,sql,sqlwithplan):
+    def getCost(self,sql,sqlwithplan, force_order=False):
         """
         :param sql: a sqlSample object
         :return: the cost of sql
@@ -154,7 +155,9 @@ class PGRunner(DBRunner):
         )
         cursor = conn.cursor()
 
-        cursor.execute("set join_collapse_limit = 1;")
+        if force_order:
+            cursor.execute("set join_collapse_limit = 1;")
+
         cursor.execute("set max_parallel_workers=1;")
         cursor.execute("set max_parallel_workers_per_gather = 1;")
         cursor.execute("set geqo_threshold = 20;")
@@ -331,19 +334,19 @@ class ISQLRunner(DBRunner):
         afterCost = end_time - start_time
         return afterCost
 
-    def getLatency(self, sql,sqlwithplan):
+    def getLatency(self, sql, sqlwithplan, force_order=False):
         """
         :param sql:a sqlSample object
         :return: the latency of sql
         """
         if self.isCostTraining:
-            return self.getCost(sql,sqlwithplan)
+            return self.getCost(sql,sqlwithplan, force_order=force_order)
         global LatencyDict
         if self.isLatencyRecord:
             if sqlwithplan in LatencyDict:
                 return LatencyDict[sqlwithplan]
         
-        thisQueryCost = self.getCost(sql,sqlwithplan)
+        thisQueryCost = self.getCost(sql,sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost()<100:
             try:
                 afterCost = self._query_latency(sqlwithplan, force_order=True)
@@ -359,8 +362,8 @@ class ISQLRunner(DBRunner):
             LatencyRecordFileHandle.flush()
         return afterCost
 
-    def getCost(self, sql, sqlwithplan):
-        return self._query_cost(sqlwithplan, force_order=True)
+    def getCost(self, sql, sqlwithplan, force_order=False):
+        return self._query_cost(sqlwithplan, force_order=force_order)
     
     def getSelectivity(self, table, whereCondition):
         global selectivityDict
@@ -369,15 +372,17 @@ class ISQLRunner(DBRunner):
 
         try:
             totalQuery = f'SELECT * WHERE {{ {table} }}'
-            total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(totalQuery, mode=-1)).group(1))
+            response = self._explain(totalQuery, mode=-1)
+            total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
         except:
-            raise ValueError(f"Cannot execute query {totalQuery}.")
+            raise ValueError(f"Cannot execute query {totalQuery}. Response {response}")
 
         try:
             resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
-            select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', self._explain(resQuery, mode=-1)).group(1))
+            response = self._explain(resQuery, mode=-1)
+            select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
         except:
-            raise ValueError(f"Cannot execute query {resQuery}.")
+            raise ValueError(f"Cannot execute query {resQuery}. Response: {response}")
 
         selectivityDict[whereCondition] = -log(select_rows/total_rows)
         return selectivityDict[whereCondition]

@@ -29,7 +29,7 @@ services:
       - '1111:1111'
       - '4000:4000'
     volumes:
-      - '/virtuoso-opensource/database:/root/virtuoso-opensource/database'
+      - '${VIRTUOSO_DB}:/root/virtuoso-opensource/database'
       - '/tmp:/tmp'
     command: bash -c "./virtuoso-t +configfile ../database/virtuoso.ini && flask run --host=0.0.0.0 --port=4000"
     

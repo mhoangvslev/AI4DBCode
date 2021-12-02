@@ -11,10 +11,24 @@ if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
     if [ "$3" = "init" ]; then
         docker exec -i postgres pg_restore -U postgres -x --no-privileges --no-owner -Fc -d imdbload < $4;
+        exit 0
     else
         echo "Unknown command $3";
         exit 1;
     fi
+elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
+    VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d virtuoso;
+    if docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql' | grep -o "http://example.com/DAV/void" ; then
+        echo "Virtuoso launched sucessfully!"
+        exit 0
+    else
+        echo "Virtuoso did not launched successfully. It could be:
+            (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
+            (2) Unknown error
+        "
+        exit 1
+    fi
+
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
         -e RTOS_JOB_DIR="JOB-queries/$3$4" \

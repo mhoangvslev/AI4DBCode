@@ -110,7 +110,8 @@ class ENV(object):
         print(f"Selected total: {total} out of {len(table_list)}")
 
         if total == len(table_list):
-            return log( self.sel.plan2Cost())/log(1.5), True
+            #return log( self.sel.plan2Cost())/log(1.5), True
+            return self.sel.plan2Cost(), True
         else:
             return 0,False
 
@@ -247,7 +248,8 @@ class DQN:
 
                 reward, done = env.reward()
                 if done:
-                    rwd = reward*log(1.5)-log(pg_cost)
+                    #rwd = reward*log(1.5)-log(pg_cost)
+                    rwd = log(reward)-log(pg_cost)
                     rewards.append(np.exp(rwd))
                     mes = mes + rwd
 

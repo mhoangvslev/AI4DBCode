@@ -1,11 +1,9 @@
-from posixpath import join
 from typing import Dict, List, Set, Tuple, Union
 from collections_extended.setlists import SetList
 
-from torch.functional import Tensor
 from ImportantConfig import Config
-from utils.DBUtils import DBRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL
+from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
+from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, FromTableSQL, JoinISQL, TargetTableSQL
 from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
@@ -92,7 +90,7 @@ class JoinTree:
 
             print(self.comparison_list)
 
-        else:
+        elif isinstance(runner, ISQLRunner):
             """
             # Note to dev: 
             1. The parsed query looks like this:
@@ -266,6 +264,8 @@ class JoinTree:
             print('\n'.join(map(str, self.comparison_list)))
 
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
+        else:
+            raise NotImplementedError(f"runner must be instance of {DBRunner}")
 
         self.db_info = db_info
         self.join_list: Dict[ str, List[Tuple[str, str]] ] = {}
@@ -795,7 +795,7 @@ class JoinTree:
 
     def plan2Cost(self):
         self.proposedPlan = self.toSql()
-        return self.runner.getLatency(self.sqlt, self.proposedPlan)
+        return self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True)
 
     @property
     def plan(self):
