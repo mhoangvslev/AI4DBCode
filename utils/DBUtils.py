@@ -187,22 +187,22 @@ class PGRunner(DBRunner):
         
         cursor.execute("SET statement_timeout = "+str(int(100000))+ ";")
         totalQuery = "select * from "+table+";"
-        #     print(totalQuery)
+        #     logging.debug(totalQuery)
 
         cursor.execute("EXPLAIN "+totalQuery)
         rows = cursor.fetchall()[0][0]
-        #     print(rows)
-        #     print(rows)
+        #     logging.debug(rows)
+        #     logging.debug(rows)
         total_rows = int(rows.split("rows=")[-1].split(" ")[0])
 
         resQuery = "select * from "+table+" Where "+whereCondition+";"
-        # print(resQuery)
+        # logging.debug(resQuery)
         cursor.execute("EXPLAIN  "+resQuery)
         rows = cursor.fetchall()[0][0]
-        #     print(rows)
+        #     logging.debug(rows)
         select_rows = int(rows.split("rows=")[-1].split(" ")[0])
         selectivityDict[whereCondition] = -log(select_rows/total_rows)
-        #     print(stored_selectivity_fake[whereCondition],select_rows,total_rows)
+        #     logging.debug(stored_selectivity_fake[whereCondition],select_rows,total_rows)
         return selectivityDict[whereCondition]
 
 class ISQLWrapperException(Exception):
@@ -301,7 +301,7 @@ class ISQLRunner(DBRunner):
             return solutions
         except Exception as error:
             #logging.error(error)
-            print(error)
+            logging.debug(error)
 
     def _explain(self, query: str, force_order: bool = False, mode=-7):
         """[summary]

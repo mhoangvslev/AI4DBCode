@@ -1,5 +1,7 @@
+import logging
 from typing import Dict, List, Set, Tuple, Union
 from collections_extended.setlists import SetList
+from torch._C import device
 
 from ImportantConfig import Config
 from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
@@ -59,7 +61,7 @@ tree_lstm_memory = {}
 class JoinTree:
     """Where the magic happens
     """
-    def __init__(self, sqlt: sqlInfo, db_info: DB, runner: DBRunner, device):
+    def __init__(self, sqlt: sqlInfo, db_info: DB, runner: DBRunner, device: device):
         global tree_lstm_memory
         self.nbFilters = 0
         tree_lstm_memory = {}
@@ -74,7 +76,7 @@ class JoinTree:
         format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
         self.join_tree_repr = gv.Digraph(format=format, graph_attr={"rankdir": "TB"})
 
-        print(self.sqlt.filename, self.sql)
+        logging.debug(self.sqlt.filename, self.sql)
 
         if isinstance(runner, PGRunner):
             parse_result = parse_dict(self.sql)[0]["SelectStmt"]
@@ -84,11 +86,14 @@ class JoinTree:
             for table in self.from_table_list:
                 self.aliasname2fromtable[table.getAliasName()] = table
                 self.aliasname2fullname[table.getAliasName()] = table.getFullName()
+
+            logging.debug(f"There are {len(parse_result)} items, {len(self.from_table_list)} from, {len(self.target_table_list)} target")
+
             self.aliasnames = setlist(self.aliasname2fromtable.keys())
             self.comparison_list =[ComparisonSQL(x) for x in parse_result["whereClause"]["BoolExpr"]["args"]]
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.from_table_list])
 
-            print(self.comparison_list)
+            logging.debug(self.comparison_list)
 
         elif isinstance(runner, ISQLRunner):
             """
@@ -230,15 +235,15 @@ class JoinTree:
                 return equal_comparisons
 
             parse_result: ParsedQuery = QueryParser.parse(self.sql)
-            #print(parse_result.triple_patterns)
-            #print(parse_result.filters)
+            #logging.debug(parse_result.triple_patterns)
+            #logging.debug(parse_result.filters)
             self.all_joins_list = get_joins(parse_result.triple_patterns)
             
             self.from_table_list = setlist(map(lambda join: join.getFromTable(), self.all_joins_list.values()))
             self.target_table_list = setlist(map(lambda join: join.getTargetTable(), self.all_joins_list.values()))
             
             self.all_table_list = self.from_table_list | self.target_table_list
-            print(f"There are {len(parse_result.triple_patterns)} triple patterns, {len(self.from_table_list)} from, {len(self.target_table_list)} target")
+            logging.debug(f"There are {len(parse_result.triple_patterns)} triple patterns, {len(self.from_table_list)} from, {len(self.target_table_list)} target")
             
             tp_set = setlist(map(lambda tp: f'{tp["subject"]} <{tp["predicate"]}> {tp["object"]}', parse_result.triple_patterns))
             all_table_set = setlist(map(lambda table: str(table), self.all_table_list))
@@ -253,15 +258,15 @@ class JoinTree:
             self.aliasnames = setlist(self.aliasname2fromtable.keys())
             self.comparison_list = list()
             self.comparison_list.extend([ComparisonISQL(x) for x in parse_result.filters])
-            print(f"There are {len(self.comparison_list)}/{len(parse_result.filters)} filter items: {self.comparison_list}")
+            logging.debug(f"There are {len(self.comparison_list)}/{len(parse_result.filters)} filter items: {self.comparison_list}")
 
             # Add equal comparison, albeit to a literal or a variable (join)
             for join_name, join in self.all_joins_list.items():
                 eq_comp = ComparisonISQLEqual(join_name, join).breakdown()
                 self.comparison_list.extend(eq_comp)
 
-            print(f"There are {len(self.comparison_list)} comparisons")
-            print('\n'.join(map(str, self.comparison_list)))
+            logging.debug(f"There are {len(self.comparison_list)} comparisons")
+            logging.debug('\n'.join(map(str, self.comparison_list)))
 
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
         else:
@@ -773,7 +778,7 @@ class JoinTree:
             str: executable query string for in SQL or in SPARQL
         """
         root = self.total - 1
-        print(f"Root: {root}")
+        logging.debug(f"Root: {root}")
 
         if os.environ["RTOS_ENGINE"] == "sql":
             res = "select "+",\n".join([str(x) for x in self.target_table_list])+"\n"
@@ -788,8 +793,8 @@ class JoinTree:
         # fn = os.path.basename(self.sqlt.filename).split('.')[0]
         # self.join_tree_repr.render(os.path.join(config.JOBDir, fn, f"{fn}_{hash(self)}.gv"))
 
-        print("Proposed plan:")
-        print(res)
+        logging.debug("Proposed plan:")
+        logging.debug(res)
 
         return res
 

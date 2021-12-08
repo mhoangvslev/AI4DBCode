@@ -19,7 +19,7 @@ services:
       - "5432:5432"
 
   virtuoso:
-    container_name: virtuoso
+    container_name: "virtuoso"
     image: "minhhoangdang/virtuoso-csopts:latest"
     environment:
       LC_ALL: C.UTF-8

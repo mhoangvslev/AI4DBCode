@@ -9,3 +9,5 @@ models/
 Latency.json
 
 *.csv
+
+*.log

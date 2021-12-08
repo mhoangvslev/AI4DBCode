@@ -15,7 +15,7 @@ class TargetTableSQL:
         {'location': 7, 'name': 'alternative_name', 'val': {'FuncCall': {'funcname': [{'String': {'str': 'min'}}], 'args': [{'ColumnRef': {'fields': [{'String': {'str': 'an'}}, {'String': {'str': 'name'}}], 'location': 11}}], 'location': 7}}}
         """
         self.target = target
-    #         print(self.target)
+    #         logging.debug(self.target)
 
     def getValue(self,):
         columnRef = self.target["val"]["FuncCall"]["args"][0]["ColumnRef"]["fields"]
@@ -363,7 +363,7 @@ class ComparisonISQL:
         self.lexpr = None
         self.rexpr = None
 
-        #print(self.comparison, type(self.comparison))
+        #logging.debug(self.comparison, type(self.comparison))
 
         def update_alias_and_column(alias, column):
             if isinstance(alias, list):
@@ -595,7 +595,7 @@ class ComparisonSQL:
                 Op = "BETWEEN"
             else:
                 import json
-                print(json.dumps(self.comparison, sort_keys=True, indent=4))
+                logging.debug(json.dumps(self.comparison, sort_keys=True, indent=4))
                 raise "Operation ERROR"
             return str(self.lexpr)+" "+Op+" "+str(self.rexpr)
         elif self.comp_kind == 1:
@@ -675,7 +675,7 @@ class DB:
             for idx, rel in enumerate(relations):
                 add_table(TableISQL(rel), idx)
         else:
-            raise ValueError("Unknown value for env variable RTOS_ENGINE")
+            raise ValueError(f"Unknown value {os.environ.get('RTOS_ENGINE')} for env variable RTOS_ENGINE")
 
         self.columns_total = 0
 

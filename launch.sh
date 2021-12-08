@@ -7,31 +7,49 @@ syntax_error(){
     "
 }
 
+export RTOS_SCHEMA_FILE="schema.sql"
+export RTOS_DB_PASSWORD="123456"
+export RTOS_DB_USER="postgres"
+export RTOS_DB_NAME="imdbload"
+export RTOS_DB_HOST="0.0.0.0"
+export RTOS_DB_PORT="5432"
+export RTOS_ISQL_ENDPOINT="sparql"
+export RTOS_ISQL_GRAPH="http://example.com/DAV/void"
+export RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890"
+export RTOS_JTREE_BUSHY=0
+export RTOS_PYTORCH_DEVICE="cpu"
+export RTOS_GV_FORMAT="png"
+export RTOS_ENGINE="$3"
+export RTOS_JOB_DIR="JOB-queries/$3"
+
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
     if [ "$3" = "init" ]; then
         docker exec -i postgres pg_restore -U postgres -x --no-privileges --no-owner -Fc -d imdbload < $4;
         exit 0
-    else
+    elif [ ! -z "$3" ]; then
         echo "Unknown command $3";
         exit 1;
     fi
+    exit 0;
 elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d virtuoso;
-    if docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql' | grep -o "http://example.com/DAV/void" ; then
+    test=$(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql')
+    if echo "$test" | grep -o "http://example.com/DAV/void" ; then
         echo "Virtuoso launched sucessfully!"
         exit 0
     else
         echo "Virtuoso did not launched successfully. It could be:
             (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
-            (2) Unknown error
+            (2) Check log below
+        $test
         "
         exit 1
     fi
 
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
-        -e RTOS_JOB_DIR="JOB-queries/$3$4" \
+        -e RTOS_JOB_DIR="JOB-queries/$3" \
         -e RTOS_SCHEMA_FILE="schema.sql" \
         -e RTOS_DB_PASSWORD="123456" \
         -e RTOS_DB_USER="postgres" \
@@ -58,7 +76,7 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         --device /dev/nvidia0 --device /dev/nvidia-modeset \
         --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools \
         --device /dev/nvidiactl \
-        -e RTOS_JOB_DIR="JOB-queries/$3$4" \
+        -e RTOS_JOB_DIR="JOB-queries/$3" \
         -e RTOS_SCHEMA_FILE="schema.sql" \
         -e RTOS_DB_PASSWORD="123456" \
         -e RTOS_DB_USER="postgres" \
@@ -87,59 +105,36 @@ elif [ "$1" = "build" ]; then
         exit 1;
     fi
 elif [ "$1" = "cost-training" ]; then
-    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
-    RTOS_JOB_DIR="JOB-queries/$2$3" \
-    RTOS_SCHEMA_FILE="schema.sql" \
-    RTOS_DB_PASSWORD="123456" \
-    RTOS_DB_USER="postgres" \
-    RTOS_DB_NAME="imdbload" \
-    RTOS_DB_HOST="0.0.0.0" \
-    RTOS_DB_PORT="5432" \
-    RTOS_ISQL_ENDPOINT="sparql" \
-    RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-    RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
-    RTOS_JTREE_BUSHY=0 \
-    RTOS_PYTORCH_DEVICE="cpu" \
-    RTOS_GV_FORMAT="png" \
-    RTOS_ENGINE="$2" \
-    python CostTraining.py
+    rm -f *.log
+    if [ "$2" = "train" ]; then
+        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3" \
+            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5"
+    elif [ "$2" = "predict" ]; then
+        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5"
+    fi
+
 elif [ "$1" = "latency-tuning" ]; then
-    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
-    RTOS_JOB_DIR="JOB-queries/$2$3" \
-    RTOS_SCHEMA_FILE="schema.sql" \
-    RTOS_DB_PASSWORD="123456" \
-    RTOS_DB_USER="postgres" \
-    RTOS_DB_NAME="imdbload" \
-    RTOS_DB_HOST="0.0.0.0" \
-    RTOS_DB_PORT="5432" \
-    RTOS_ISQL_ENDPOINT="sparql" \
-    RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-    RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
-    RTOS_JTREE_BUSHY=0 \
-    RTOS_PYTORCH_DEVICE="cpu" \
-    RTOS_GV_FORMAT="png" \
-    RTOS_ENGINE="$2" \
-    python LatencyTuning.py
-elif [ "$1" = "train" ]; then
-    find JOB-queries/$2$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-    find JOB-queries/$2$3/*.csv -type f -exec rm '{}' \;
-    RTOS_JOB_DIR="JOB-queries/$2$3" \
-    RTOS_SCHEMA_FILE="schema.sql" \
-    RTOS_DB_PASSWORD="123456" \
-    RTOS_DB_USER="postgres" \
-    RTOS_DB_NAME="imdbload" \
-    RTOS_DB_HOST="0.0.0.0" \
-    RTOS_DB_PORT="5432" \
-    RTOS_ISQL_ENDPOINT="sparql" \
-    RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-    RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890" \
-    RTOS_JTREE_BUSHY=0 \
-    RTOS_PYTORCH_DEVICE="cpu" \
-    RTOS_GV_FORMAT="png" \
-    RTOS_ENGINE="$2" \
-    python train.py
+    rm -f *.log
+    if [ "$2" = "train" ]; then
+        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3" \
+            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5"
+    elif [ "$2" = "predict" ]; then
+        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5"
+    fi
+
+elif [ "$1" = "train" ]; then 
+    rm -f *.log
+    if [ "$2" = "train" ]; then
+        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
+        python train.py --mode "train" --reward "$4" --queryfile "$5"
+    elif [ "$2" = "predict" ]; then
+        python train.py --mode "predict" --reward "$4" --queryfile "$5"
+    fi
 else
     syntax_error;
 fi

@@ -1,4 +1,5 @@
 
+import logging
 import math
 import os
 import random
@@ -22,11 +23,13 @@ import numpy as np
 from math import log
 from itertools import count
 import pandas as pd
-from math import e
+from scipy.stats import gmean
+ 
+FOOP_CONST=10e13
 
 class ENV(object):
-    def __init__(self,sql,db_info,pgrunner,device):
-        self.sel = JoinTree(sql,db_info,pgrunner,device )
+    def __init__(self, sql: sqlInfo, db_info: DB, pgrunner: DBRunner, device: device, rewarder: str):
+        self.sel = JoinTree(sql,db_info,pgrunner,device)
         self.sql = sql
         self.hashs = ""
         self.table_set = set([])
@@ -35,8 +38,11 @@ class ENV(object):
         self.planSpace = int(os.environ["RTOS_JTREE_BUSHY"]) #0:leftDeep,1:bushy
         self.terminate = False
 
+        logging.debug(f"Rewarder: {rewarder}")
+        self._rewarder = rewarder
+
     def getPlan(self):
-        return self.sel.plan()
+        return self.sel.plan
 
     def actionValue(self, left: str, right: str, model: SPINN) -> Tensor:
         self.sel.joinTables(left,right,fake = True)
@@ -46,6 +52,14 @@ class ENV(object):
         self.sel.aliasnames_fa.pop(self.sel.left_son[self.sel.total])
         self.sel.aliasnames_fa.pop(self.sel.right_son[self.sel.total])
         return res_Value
+
+    @property
+    def rewarder(self):
+        return self._rewarder
+
+    @rewarder.setter
+    def rewarder(self, rewarder_type: str):
+        self._rewarder = rewarder_type
 
     def selectValue(self, model: SPINN) -> Tensor:
         tree_state = []
@@ -101,17 +115,45 @@ class ENV(object):
                 if l_fa != r_fa:
                     action_value_list.append((self.actionValue(l_node,r_node,model),one_join))
 
-        print(f"Possible actions: {len(action_value_list)} out of {len(self.sel.join_candidate)} join candidates")
+        logging.debug(f"Possible actions: {len(action_value_list)} out of {len(self.sel.join_candidate)} join candidates")
         return action_value_list
 
     def reward(self):
+        """Calculate the reward for the learner. The network seeks to minimise the loss
+        (1) rtos: 
+            max(cost/baseline_cost - 1, 0)
+        (2) Cost improvement: 
+            min(
+                max(
+                    log(cost / baseline_cost, 10), 
+                    -10
+                ), 
+                10
+            )
+        (3) Cost: cost
+
+        Returns:
+            [type]: [description]
+        """
         table_list = self.sel.all_table_list if os.environ['RTOS_ENGINE'] == "sparql" else self.sel.from_table_list
         total = self.sel.total + 1
-        print(f"Selected total: {total} out of {len(table_list)}")
+        logging.debug(f"Selected total: {total} out of {len(table_list)}")
 
         if total == len(table_list):
             #return log( self.sel.plan2Cost())/log(1.5), True
-            return self.sel.plan2Cost(), True
+            cost = self.sel.plan2Cost()
+            baseline_cost = self.sql.getDPlatency()
+
+            if self._rewarder == "rtos":
+                return max(cost/baseline_cost - 1, 0), True
+            elif self._rewarder == "cost-improvement":
+                return min(max(np.log10(cost / baseline_cost), -10), 10), True
+            elif self._rewarder == "cost":
+                return cost, True
+            elif self._rewarder == "foop-cost":
+                return 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10, True
+            else:
+                raise NotImplementedError(f"No handler for rewarder of type {self._rewarder}!")
         else:
             return 0,False
 
@@ -159,7 +201,7 @@ class ReplayMemory(object):
         self.bestJoinTreeValue = {}
 
 class DQN:
-    def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device):
+    def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device, rewarder: str):
         self.Memory = ReplayMemory(1000)
         self.BATCH_SIZE = 1
 
@@ -176,6 +218,7 @@ class DQN:
         self.pgrunner = pgrunner
         self.device = device
         self.steps_done = 0
+        self.rewarder = rewarder
 
     def select_action(self, env: ENV, need_random = True) -> Tuple[Tensor, Tuple[str, str], Tensor]:
         """Decide the next action. During earlier episodes, actions will be chosen randomly but as the training goes on, only actions with minimal costs are chosen
@@ -237,7 +280,7 @@ class DQN:
         mes = 0
         for sql in val_list:
             pg_cost = sql.getDPlatency()
-            env = ENV(sql,self.db_info,self.pgrunner,self.device)
+            env = ENV(sql,self.db_info,self.pgrunner,self.device, self.rewarder)
 
             for t in count():
                 action_list, chosen_action, all_action = self.select_action(env,need_random=False)
@@ -248,21 +291,18 @@ class DQN:
 
                 reward, done = env.reward()
                 if done:
-                    #rwd = reward*log(1.5)-log(pg_cost)
-                    rwd = log(reward)-log(pg_cost)
-                    rewards.append(np.exp(rwd))
-                    mes = mes + rwd
+                    rewards.append(reward)
+                    mes += reward
 
                     fn = os.path.join(Config().JOBDir, "summary.csv")
                     pd.DataFrame(
-                        [[t, sql.filename, rwd, mes]], 
+                        [[t, sql.filename, reward, mes]], 
                         columns=["step", "query", "reward", "mes"]
                     ).to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
                     break
 
-        lr = len(rewards)
-        mrc, gmrl = sum(rewards)/lr, e**(mes/lr)        
-        print("MRC",mrc,"GMRL",gmrl)
+        mrc, gmrl = np.average(rewards), gmean(rewards)       
+        logging.debug("MRC",mrc,"GMRL",gmrl)
         return mrc, gmrl
 
     def optimize_model(self,):
