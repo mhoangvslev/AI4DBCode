@@ -3,6 +3,10 @@ from torch.functional import Tensor
 from torch.nn import init
 import torchfold
 import torch.nn as nn
+import os
+
+NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 4
+
 class TreeLSTM(nn.Module):
     def __init__(self, num_units):
         super().__init__()
@@ -56,7 +60,7 @@ class SPINN(nn.Module):
         self.tree_root = TreeRoot(size)
         self.FC = nn.Linear(size*2, size)
         self.table_embeddings = nn.Embedding(n_words, size)#2 * max_column_in_table * size)
-        self.column_embeddings = nn.Embedding(n_words, 2 * max_column_in_table * size)
+        self.column_embeddings = nn.Embedding(n_words, NB_FEATURE_SLOTS * max_column_in_table * size)
 
         self.out = nn.Linear(size*2, size)
         self.out2 = nn.Linear(size, n_classes)
@@ -73,9 +77,9 @@ class SPINN(nn.Module):
         self.device = device
 
     def leaf(self, word_id: torch.Tensor, table_fea: torch.Tensor=None):
-        all_columns = table_fea.view(-1,self.max_column_in_table*2,1)*self.column_embeddings(word_id).reshape(-1,2 * self.max_column_in_table,self.size)
+        all_columns = table_fea.view(-1,self.max_column_in_table*NB_FEATURE_SLOTS,1)*self.column_embeddings(word_id).reshape(-1,NB_FEATURE_SLOTS * self.max_column_in_table,self.size)
         all_columns = self.relu(self.leafFC(all_columns))
-        table_emb = self.max_pooling(all_columns.view(-1,self.max_column_in_table*2,self.size)).view(-1,self.size)
+        table_emb = self.max_pooling(all_columns.view(-1,self.max_column_in_table*NB_FEATURE_SLOTS,self.size)).view(-1,self.size)
         return self.leafLn(table_emb), torch.zeros(word_id.size()[0], self.size,device = self.device,dtype = torch.float32)
         
     def inputX(self,left_emb,right_emb):

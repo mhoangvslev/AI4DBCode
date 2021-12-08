@@ -5,13 +5,13 @@ from torch._C import device
 
 from ImportantConfig import Config
 from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, FromTableSQL, JoinISQL, TargetTableSQL
+from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL
 from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
 
 import torch
-import torch
+import re
 import torch.nn as nn
 from itertools import count
 import numpy as np
@@ -21,6 +21,8 @@ import graphviz as gv
 from collections_extended import setlist
 
 config = Config()
+
+NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 4
 
 class sqlInfo:
     def __init__(self, runner: DBRunner, sql: str, filename: str):
@@ -239,10 +241,10 @@ class JoinTree:
             #logging.debug(parse_result.filters)
             self.all_joins_list = get_joins(parse_result.triple_patterns)
             
-            self.from_table_list = setlist(map(lambda join: join.getFromTable(), self.all_joins_list.values()))
-            self.target_table_list = setlist(map(lambda join: join.getTargetTable(), self.all_joins_list.values()))
+            self.from_table_list: SetList[FromTableISQL] = setlist(map(lambda join: join.getFromTable(), self.all_joins_list.values()))
+            self.target_table_list: SetList[TargetTableISQL] = setlist(map(lambda join: join.getTargetTable(), self.all_joins_list.values()))
             
-            self.all_table_list = self.from_table_list | self.target_table_list
+            self.all_table_list: SetList[DummyTableISQL] = self.from_table_list | self.target_table_list
             logging.debug(f"There are {len(parse_result.triple_patterns)} triple patterns, {len(self.from_table_list)} from, {len(self.target_table_list)} target")
             
             tp_set = setlist(map(lambda tp: f'{tp["subject"]} <{tp["predicate"]}> {tp["object"]}', parse_result.triple_patterns))
@@ -288,16 +290,20 @@ class JoinTree:
         self.left_aliasname: Dict[int, str] = {}
         self.right_aliasname: Dict[int, str] = {}
 
-        # Initialize feature set F
+        """
+        Initialize feature set F
+        size = max_column_in_table * 2 columns + 1 subject feature + 1 object feature
+        """
         self.table_fea_set = {}
         for aliasname in self.aliasnames_root_set:
-            self.table_fea_set[aliasname] = [0.0]*config.max_column_in_table*2
+            self.table_fea_set[aliasname] = [0.0]*(config.max_column_in_table * NB_FEATURE_SLOTS)
             self.join_list[aliasname] = []
 
         self.join_candidate: Set[Tuple[str, str]] = setlist()
-        self.join_matrix = []
-
+        
         # Initialize M matrix
+
+        self.join_matrix = []
         for idx in range(len(self.db_info)):
             self.join_matrix.append([0]*len(self.db_info))
             
@@ -376,7 +382,11 @@ class JoinTree:
 
                 table_idx = left_table_class.column2idx[left_column]
 
-                self.table_fea_set[left_aliasname][table_idx * 2] = 1
+                self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
+
+                if os.environ['RTOS_ENGINE'] == "sparql":
+                    self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
+
                 self.join_list[right_aliasname].append((left_aliasname,comparison))
 
                 # Encode right operand
@@ -402,7 +412,11 @@ class JoinTree:
                 #     right_column = tmp[0]
 
                 table_idx = right_table_class.column2idx[right_column]
-                self.table_fea_set[right_aliasname][table_idx * 2] = 1
+                self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
+                
+                if os.environ['RTOS_ENGINE'] == "sparql":
+                    self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS + 3] = 1
+
 
                 # Add two join candidate left-right then right-left. While they yield the same result but one is faster than the another.
                 self.join_candidate.add((left_aliasname,right_aliasname))
@@ -456,11 +470,14 @@ class JoinTree:
                     left_column = tmp[0]
 
                 table_idx = left_table_class.column2idx[left_column]
-                self.table_fea_set[left_aliasname][table_idx * 2 + 1] += self.runner.getSelectivity(
+                selectivity = self.runner.getSelectivity(
                     str(self.aliasname2fromtable[left_aliasname]), 
                     comparison.toString()
                 )
+                self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 1] += selectivity
 
+                if os.environ['RTOS_ENGINE'] == "sparql":
+                    self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] += selectivity
 
         for aliasname in self.aliasnames_root_set:
             self.table_fea_set[aliasname] = torch.tensor(self.table_fea_set[aliasname],device = self.device).reshape(1,-1).detach()

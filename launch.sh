@@ -20,7 +20,7 @@ export RTOS_JTREE_BUSHY=0
 export RTOS_PYTORCH_DEVICE="cpu"
 export RTOS_GV_FORMAT="png"
 export RTOS_ENGINE="$3"
-export RTOS_JOB_DIR="JOB-queries/$3"
+export RTOS_JOB_DIR="JOB-queries/$3$DEBUG"
 
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
@@ -107,33 +107,33 @@ elif [ "$1" = "build" ]; then
 elif [ "$1" = "cost-training" ]; then
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3" \
-            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
+            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5"
+        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 
 elif [ "$1" = "latency-tuning" ]; then
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3" \
-            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
+            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5"
+        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 
 elif [ "$1" = "train" ]; then 
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        python train.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        python train.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python train.py --mode "predict" --reward "$4" --queryfile "$5"
+        python train.py --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 else
     syntax_error;
