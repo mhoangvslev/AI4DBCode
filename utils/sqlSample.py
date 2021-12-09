@@ -76,7 +76,7 @@ class JoinTree:
         format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
         self.join_tree_repr = gv.Digraph(format=format, graph_attr={"rankdir": "TB"})
 
-        logging.debug(self.sqlt.filename, self.sql)
+        logging.debug(f"\nFile name: {self.sqlt.filename}\nSQL: {self.sql}")
 
         if isinstance(runner, PGRunner):
             parse_result = parse_dict(self.sql)[0]["SelectStmt"]

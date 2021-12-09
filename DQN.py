@@ -302,7 +302,7 @@ class DQN:
                     break
 
         mrc, gmrl = np.average(rewards), gmean(rewards)       
-        logging.debug("MRC",mrc,"GMRL",gmrl)
+        logging.debug(f"MRC: {mrc}n GMRL: {gmrl}")
         return mrc, gmrl
 
     def optimize_model(self,):
