@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from typing import List, Tuple, Union
@@ -595,7 +596,7 @@ class ComparisonSQL:
                 Op = "BETWEEN"
             else:
                 import json
-                logging.debug(json.dumps(self.comparison, sort_keys=True, indent=4))
+                logging.debug(str(json.dumps(self.comparison, sort_keys=True, indent=4)))
                 raise "Operation ERROR"
             return str(self.lexpr)+" "+Op+" "+str(self.rexpr)
         elif self.comp_kind == 1:
