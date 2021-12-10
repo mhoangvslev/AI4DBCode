@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Set, Tuple, Union
 from collections_extended.setlists import SetList
 from torch._C import device
+from torchfold.torchfold import Fold
 
 from ImportantConfig import Config
 from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
@@ -749,7 +750,7 @@ class JoinTree:
         encoding, _ = encode_node(node_idx)
         return encoding
 
-    def encode_tree_fold(self,fold, node_idx):
+    def encode_tree_fold(self,fold: Fold, node_idx: int):
         def get_inputX(node):
             left_aliasname = self.left_aliasname[node]
             right_aliasname = self.right_aliasname[node]
