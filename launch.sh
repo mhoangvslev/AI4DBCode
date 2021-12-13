@@ -17,10 +17,11 @@ export RTOS_ISQL_ENDPOINT="sparql"
 export RTOS_ISQL_GRAPH="http://example.com/DAV/void"
 export RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890"
 export RTOS_JTREE_BUSHY=0
-export RTOS_PYTORCH_DEVICE="cpu"
+export RTOS_PYTORCH_DEVICE="gpu"
 export RTOS_GV_FORMAT="png"
 export RTOS_ENGINE="$3"
-export RTOS_JOB_DIR="JOB-queries/$3"
+export RTOS_JOB_DIR="JOB-queries/$3$DEBUG"
+export RTOS_SPARQL_EXTRA_FEAT="yes"
 
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
@@ -34,19 +35,28 @@ if [ "$1" = "start" -a "$2" = "postgres" ]; then
     exit 0;
 elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d virtuoso;
-    test=$(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql')
-    if echo "$test" | grep -o "http://example.com/DAV/void" ; then
-        echo "Virtuoso launched sucessfully!"
-        exit 0
-    else
-        echo "Virtuoso did not launched successfully. It could be:
-            (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
-            (2) Check log below
-        $test
-        "
-        exit 1
-    fi
+    attempt=0
 
+    until echo $(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql') | grep -o "http://example.com/DAV/void" ; 
+    do
+        attempt=$(expr $attempt + 1)
+        echo "Making attempt #$attempt...";
+        sleep 1;
+
+        echo $test
+
+        if [ "$attempt" = "$3" ]; then
+            echo "Virtuoso did not launched successfully. It could be:
+                (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
+                (2) Check log below
+            $test
+            "
+            exit 1
+        fi
+    done
+
+    echo "Virtuoso is succesfully setup!"
+    
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
         -e RTOS_JOB_DIR="JOB-queries/$3" \
@@ -107,33 +117,33 @@ elif [ "$1" = "build" ]; then
 elif [ "$1" = "cost-training" ]; then
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3" \
-            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
+            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5"
+        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 
 elif [ "$1" = "latency-tuning" ]; then
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3" \
-            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
+            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5"
+        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 
 elif [ "$1" = "train" ]; then 
     rm -f *.log
     if [ "$2" = "train" ]; then
-        find JOB-queries/$3 -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3/*.csv -type f -exec rm '{}' \;
-        python train.py --mode "train" --reward "$4" --queryfile "$5"
+        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
+        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
+        python train.py --mode "train" --reward "$4" --queryfile "$5" $6
     elif [ "$2" = "predict" ]; then
-        python train.py --mode "predict" --reward "$4" --queryfile "$5"
+        python train.py --mode "predict" --reward "$4" --queryfile "$5" $6
     fi
 else
     syntax_error;

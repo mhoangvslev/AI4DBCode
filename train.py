@@ -26,7 +26,7 @@ class Train:
     def __init__(self, rewarder) -> None:
         self.handlers = [
             logging.FileHandler(f"cost-training_{datetime.now()}.log"),
-            logging.StreamHandler()
+            #logging.StreamHandler()
         ]
 
         logging.basicConfig(
@@ -66,7 +66,7 @@ class Train:
         ).to(self.device)
 
         for name, param in self.policy_net.named_parameters():
-            logging.debug(name,param.shape)
+            logging.debug(f"Parameter: {name} of shape {param.shape}")
             if len(param.shape)==2:
                 init.xavier_normal(param)
             else:
@@ -84,18 +84,12 @@ class Train:
                 self.config.sql_password,
                 self.config.sql_ip,
                 self.config.sql_port,
-                isCostTraining=True,
-                latencyRecord = False,
-                latencyRecordFile = "Cost.json"
             ) if os.environ["RTOS_ENGINE"] == "sql" else
             ISQLRunner(
                 self.config.isql_endpoint,
                 self.config.isql_graph,
                 self.config.isql_host,
                 self.config.isql_port,
-                isCostTraining=True,
-                latencyRecord = False,
-                latencyRecordFile = "Cost.json"
             )
         )
 
@@ -106,7 +100,7 @@ class Train:
         kl = (li-1)//k + 1
         train = []
         validate = []
-        for idx in tqdm(range(li)):
+        for idx in range(li):
 
             if idx%k == ix:
                 validate.append(input_list[idx])
@@ -119,14 +113,14 @@ class Train:
         def file_name(file_dir):
             import os
             L = []
-            for root, dirs, files in tqdm(os.walk(file_dir)):
-                for file in tqdm(files):
+            for root, dirs, files in os.walk(file_dir):
+                for file in files:
                     if os.path.splitext(file)[1] == f'.{os.environ["RTOS_ENGINE"]}':
                         L.append(os.path.join(root, file))
             return L
         files = file_name(QueryDir)
         sql_list = []
-        for filename in tqdm(files):
+        for filename in files:
             with open(filename, "r") as f:
                 data = f.readlines()
                 one_sql = "".join(data)
@@ -138,7 +132,7 @@ class Train:
         reward_sum = 0
         rewardsP = []
         mes = 0
-        for sql in tqdm(sql_list):
+        for sql in sql_list:
             #         sql = val_list[i_episode%len(train_list)]
             pg_cost = sql.getDPlatency()
             #         continue
@@ -183,7 +177,7 @@ class Train:
         startTime = time.time()
         print_every = 20
         TARGET_UPDATE = 3
-        for i_episode in range(0,10000):
+        for i_episode in tqdm(range(0,10000)):
             if i_episode % 200 == 100:
                 trainSet = self.resample_sql(trainSet_temp)
             #     sql = random.sample(train_list_back,1)[0][0]
@@ -248,9 +242,9 @@ class Train:
                     losses.append(loss)
                     if ((i_episode + 1)%print_every==0):
                         logging.debug(np.mean(losses))
-                        logging.debug("###################### Epoch",i_episode//print_every,pg_cost)
+                        logging.debug(f"###################### Epoch {i_episode//print_every}, baseline_cost = {pg_cost}")
                         mrc, gmrl = self.dqn.validate(validateSet)
-                        logging.debug("time",time.time()-startTime)
+                        logging.debug(f"time {time.time()-startTime}")
                         logging.debug("~~~~~~~~~~~~~~")
                     break
             if i_episode % TARGET_UPDATE == 0:

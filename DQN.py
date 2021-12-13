@@ -11,6 +11,7 @@ import torch.nn.functional as F
 #import torchvision.transforms as T
 import torch
 from collections import namedtuple
+from torchfold.torchfold import Fold
 
 from tqdm import tqdm
 from ImportantConfig import Config
@@ -69,7 +70,7 @@ class ENV(object):
         res = torch.cat(tree_state,dim = 0)
         return model.logits(res, self.sel.join_matrix)
 
-    def selectValueFold(self,fold):
+    def selectValueFold(self,fold: Fold):
         tree_state = []
         for idx in self.sel.aliasnames_root_set:
             if not idx in self.sel.aliasnames_fa:
@@ -166,7 +167,7 @@ class ReplayMemory(object):
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.memory = []
+        self.memory: List[Transition] = []
         self.position = 0
         self.bestJoinTreeValue = {}
     def push(self, *args):
@@ -187,7 +188,7 @@ class ReplayMemory(object):
         #         self.position
         self.position = (self.position + 1) % self.capacity
 
-    def sample(self, batch_size):
+    def sample(self, batch_size) -> List[Transition]:
         if len(self.memory)>batch_size:
             return random.sample(self.memory, batch_size)
         else:
@@ -302,7 +303,7 @@ class DQN:
                     break
 
         mrc, gmrl = np.average(rewards), gmean(rewards)       
-        logging.debug("MRC",mrc,"GMRL",gmrl)
+        logging.debug(f"MRC: {mrc}n GMRL: {gmrl}")
         return mrc, gmrl
 
     def optimize_model(self,):

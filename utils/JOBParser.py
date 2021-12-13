@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from typing import List, Tuple, Union
@@ -595,7 +596,7 @@ class ComparisonSQL:
                 Op = "BETWEEN"
             else:
                 import json
-                logging.debug(json.dumps(self.comparison, sort_keys=True, indent=4))
+                logging.debug(str(json.dumps(self.comparison, sort_keys=True, indent=4)))
                 raise "Operation ERROR"
             return str(self.lexpr)+" "+Op+" "+str(self.rexpr)
         elif self.comp_kind == 1:
@@ -626,6 +627,9 @@ class TableSQL:
             self.column2idx[columndef["ColumnDef"]["colname"]] = idx
             self.idx2column[idx] = columndef["ColumnDef"]["colname"]
 
+    def __repr__(self) -> str:
+        return f"Name: {self.name}, col2idx: {self.column2idx}, idx2col: {self.idx2column}"
+
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))
 
@@ -642,6 +646,9 @@ class TableISQL:
                 idx = len(self.column2idx)
                 self.column2idx[col] = idx
                 self.idx2column[idx] = col
+    
+    def __repr__(self) -> str:
+        return f"Name: {self.name}, col2idx: {self.column2idx}, idx2col: {self.idx2column}"
 
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))
