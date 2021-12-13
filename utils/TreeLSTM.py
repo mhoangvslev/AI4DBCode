@@ -5,7 +5,7 @@ import torchfold
 import torch.nn as nn
 import os
 
-NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 4
+NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 3
 
 class TreeLSTM(nn.Module):
     def __init__(self, num_units):

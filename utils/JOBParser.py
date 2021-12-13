@@ -627,6 +627,9 @@ class TableSQL:
             self.column2idx[columndef["ColumnDef"]["colname"]] = idx
             self.idx2column[idx] = columndef["ColumnDef"]["colname"]
 
+    def __repr__(self) -> str:
+        return f"Name: {self.name}, col2idx: {self.column2idx}, idx2col: {self.idx2column}"
+
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))
 
@@ -643,6 +646,9 @@ class TableISQL:
                 idx = len(self.column2idx)
                 self.column2idx[col] = idx
                 self.idx2column[idx] = col
+    
+    def __repr__(self) -> str:
+        return f"Name: {self.name}, col2idx: {self.column2idx}, idx2col: {self.idx2column}"
 
     def oneHotAll(self):
         return np.zeros((1, len(self.column2idx)))

@@ -84,18 +84,12 @@ class Train:
                 self.config.sql_password,
                 self.config.sql_ip,
                 self.config.sql_port,
-                isCostTraining=True,
-                latencyRecord = False,
-                latencyRecordFile = "Cost.json"
             ) if os.environ["RTOS_ENGINE"] == "sql" else
             ISQLRunner(
                 self.config.isql_endpoint,
                 self.config.isql_graph,
                 self.config.isql_host,
                 self.config.isql_port,
-                isCostTraining=True,
-                latencyRecord = False,
-                latencyRecordFile = "Cost.json"
             )
         )
 

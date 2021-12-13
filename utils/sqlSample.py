@@ -11,6 +11,11 @@ from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
 
+from pyrdf2vec import RDF2VecTransformer
+from pyrdf2vec.embedders import Word2Vec
+from pyrdf2vec.graphs import KG
+from pyrdf2vec.walkers import RandomWalker
+
 import torch
 import re
 import torch.nn as nn
@@ -23,7 +28,7 @@ from collections_extended import setlist
 
 config = Config()
 
-NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 4
+NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 3
 
 class sqlInfo:
     def __init__(self, runner: DBRunner, sql: str, filename: str):
@@ -61,6 +66,10 @@ class sqlInfo:
             self.bestOrder = order
 
 tree_lstm_memory = {}
+
+kg = KG()
+kg.
+
 class JoinTree:
     """Where the magic happens
     """
@@ -385,7 +394,7 @@ class JoinTree:
 
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
 
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
                 self.join_list[right_aliasname].append((left_aliasname,comparison))
@@ -415,8 +424,8 @@ class JoinTree:
                 table_idx = right_table_class.column2idx[right_column]
                 self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
                 
-                if os.environ['RTOS_ENGINE'] == "sparql":
-                    self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS + 3] = 1
+                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
+                    self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
 
                 # Add two join candidate left-right then right-left. While they yield the same result but one is faster than the another.
@@ -477,17 +486,17 @@ class JoinTree:
                 )
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 1] += selectivity
 
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] += selectivity
 
         for aliasname in self.aliasnames_root_set:
             self.table_fea_set[aliasname] = torch.tensor(self.table_fea_set[aliasname],device = self.device).reshape(1,-1).detach()
+            logging.debug(f"Aliasname: {aliasname}, Vector: {self.table_fea_set[aliasname]}")
             self.aliasnames_set[aliasname] = setlist([aliasname])
             for y in self.join_list[aliasname]:
                 if aliasname not in self.aliasnames_join_set:
                     self.aliasnames_join_set[aliasname] = setlist()
                 self.aliasnames_join_set[aliasname].add(y[0])
-
 
         predice_list_dict={}
         for table in self.db_info.tables:

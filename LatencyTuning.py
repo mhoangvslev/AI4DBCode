@@ -85,8 +85,8 @@ class LatencyTuning:
                 self.config.sql_password,
                 self.config.sql_ip,
                 self.config.sql_port,
-                isCostTraining=True,
-                latencyRecord = False,
+                isCostTraining=False,
+                latencyRecord = True,
                 latencyRecordFile = "Cost.json"
             ) if os.environ["RTOS_ENGINE"] == "sql" else
             ISQLRunner(
@@ -94,8 +94,8 @@ class LatencyTuning:
                 self.config.isql_graph,
                 self.config.isql_host,
                 self.config.isql_port,
-                isCostTraining=True,
-                latencyRecord = False,
+                isCostTraining=False,
+                latencyRecord = True,
                 latencyRecordFile = "Cost.json"
             )
         )
