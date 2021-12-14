@@ -11,3 +11,7 @@ Latency.json
 *.csv
 
 *.log
+
+Cost.json
+
+poetry.lock

@@ -11,10 +11,10 @@ from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
 
-from pyrdf2vec import RDF2VecTransformer
-from pyrdf2vec.embedders import Word2Vec
-from pyrdf2vec.graphs import KG
-from pyrdf2vec.walkers import RandomWalker
+# from pyrdf2vec import RDF2VecTransformer
+# from pyrdf2vec.embedders import Word2Vec
+# from pyrdf2vec.graphs import KG
+# from pyrdf2vec.walkers import RandomWalker
 
 import torch
 import re
@@ -66,10 +66,6 @@ class sqlInfo:
             self.bestOrder = order
 
 tree_lstm_memory = {}
-
-kg = KG()
-kg.
-
 class JoinTree:
     """Where the magic happens
     """

@@ -21,7 +21,7 @@ export RTOS_PYTORCH_DEVICE="gpu"
 export RTOS_GV_FORMAT="png"
 export RTOS_ENGINE="$3"
 export RTOS_JOB_DIR="JOB-queries/$3$DEBUG"
-export RTOS_SPARQL_EXTRA_FEAT="yes"
+export RTOS_SPARQL_EXTRA_FEAT="no"
 
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
