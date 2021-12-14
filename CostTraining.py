@@ -176,14 +176,14 @@ class CostTraining:
                     break
         return res_sql+sql_list
 
-    def train(self, trainSet: List[sqlInfo], validateSet: List[sqlInfo]):
+    def train(self, trainSet: List[sqlInfo], validateSet: List[sqlInfo], n_episodes=10000):
 
         trainSet_temp = trainSet
         losses = []
         startTime = time.time()
         print_every = 10
         TARGET_UPDATE = 3
-        for i_episode in tqdm(range(0,10000), unit="episode"):
+        for i_episode in tqdm(range(0,n_episodes), unit="episode"):
             if i_episode % 200 == 100:
                 logging.debug("Resampling training set...")
                 trainSet = self.resample_sql(trainSet_temp)
@@ -365,6 +365,7 @@ if __name__=='__main__':
     parser.add_argument('--queryfile', type=str, default="", nargs="*", help="Relative path to queryfile")
     parser.add_argument('--log_level', type=str, default="DEBUG", help="Log level")
     parser.add_argument('--reward', type=str, default="rtos", help="The type of reward rtos|cost-improvement|cost|foop-cost")
+    parser.add_argument('--n_episodes', type=int, default=10000, help="The total number of episodes")
     args = parser.parse_args()
 
     rewarder = args.reward
@@ -377,7 +378,7 @@ if __name__=='__main__':
         JOBQueries = ct.QueryLoader(QueryDir=ct.config.JOBDir)
         Q4,Q1 = ct.k_fold(JOBQueries,10,1)
         # logging.debug(Q4,Q1)
-        ct.train(Q4+sytheticQueries,Q1)
+        ct.train(Q4+sytheticQueries,Q1, n_episodes=args.n_episodes)
     elif args.mode == "predict":
         queryfiles: List[AnyStr] = []
         for q in args.queryfile:

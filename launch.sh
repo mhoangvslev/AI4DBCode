@@ -3,7 +3,7 @@
 syntax_error(){
     echo "Syntax: 
     (1) Setup: sh launch.sh <start|build> <postgres|rtos-cpu|rtos-gpu>
-    (2) Train: sh launch.sh <cost-training|latency-tuning|train> <sql|sparql> [-debug]
+    (2) Train: [DEBUG='-debug'] sh launch.sh <cost-training|latency-tuning|train> <train|predict> <sql|sparql> <cost|cost-improvement|rtos|foop-cost> n_episodes
     "
 }
 
@@ -120,9 +120,9 @@ elif [ "$1" = "cost-training" ]; then
         find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
         find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
         RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
-            python CostTraining.py --mode "train" --reward "$4" --queryfile "$5" $6
+            python CostTraining.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
     elif [ "$2" = "predict" ]; then
-        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5" $6
+        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5" 
     fi
 
 elif [ "$1" = "latency-tuning" ]; then
@@ -131,9 +131,9 @@ elif [ "$1" = "latency-tuning" ]; then
         find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
         find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
         RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
-            python LatencyTuning.py --mode "train" --reward "$4" --queryfile "$5" $6
+            python LatencyTuning.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
     elif [ "$2" = "predict" ]; then
-        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5" $6
+        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5" 
     fi
 
 elif [ "$1" = "train" ]; then 
@@ -141,9 +141,9 @@ elif [ "$1" = "train" ]; then
     if [ "$2" = "train" ]; then
         find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
         find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
-        python train.py --mode "train" --reward "$4" --queryfile "$5" $6
+        python train.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
     elif [ "$2" = "predict" ]; then
-        python train.py --mode "predict" --reward "$4" --queryfile "$5" $6
+        python train.py --mode "predict" --reward "$4" --queryfile "$5" 
     fi
 else
     syntax_error;

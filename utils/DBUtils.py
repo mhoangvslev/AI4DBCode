@@ -370,6 +370,8 @@ class ISQLRunner(DBRunner):
         if whereCondition in selectivityDict:
             return selectivityDict[whereCondition]
 
+        response = None
+
         try:
             totalQuery = f'SELECT * WHERE {{ {table} }}'
             response = self._explain(totalQuery, mode=-1)
