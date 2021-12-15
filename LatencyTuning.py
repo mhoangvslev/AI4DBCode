@@ -65,14 +65,11 @@ class LatencyTuning:
             device=self.device, 
             max_column_in_table=self.config.max_column_in_table
         ).to(self.device)
+        
+        if not os.path.exists("models/CostTraining.pth"):
+            raise FileExistsError("LatencyTuning requires the model from CostTraining!")
 
-        for name, param in self.policy_net.named_parameters():
-            logging.debug(f"Parameter: {name} of shape {param.shape}")
-            if len(param.shape)==2:
-                init.xavier_normal(param)
-            else:
-                init.uniform(param)
-
+        self.policy_net.load_state_dict(torch.load("models/CostTraining.pth"))
         # policy_net.load_state_dict(torch.load("models/JOB_tc.pth"))#load cost train model
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
