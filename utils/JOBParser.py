@@ -8,8 +8,8 @@ from torch._C import BoolType, Value
 from rdflib.term import Literal, Variable, URIRef
 from rdflib.plugins.sparql import parserutils
 from torch.functional import einsum
-from ImportantConfig import Config
-        
+import yaml
+
 class TargetTableSQL:
     def __init__(self, target):
         """
@@ -654,8 +654,10 @@ class TableISQL:
         return np.zeros((1, len(self.column2idx)))
         
 class DB:
-    def __init__(self, schema: str, TREE_NUM_IN_NET=40):
+    def __init__(self, schema: str, config: dict):
 
+        self.config = config
+        
         from psqlparse import parse_dict
         parse_tree = parse_dict(schema)
 
@@ -664,7 +666,7 @@ class DB:
         self.table_names: List[str] = []
         self.name2table: Tuple[ str, Union[TableISQL, TableSQL] ] = {}
         self.size = 0
-        self.TREE_NUM_IN_NET = TREE_NUM_IN_NET
+        self.TREE_NUM_IN_NET = config["database"]["tree_num_in_net"]
 
         def add_table(table: Union[TableSQL, TableISQL], idx):
             self.tables.append(table)
@@ -672,17 +674,17 @@ class DB:
             self.name2idx[table.name] = idx
             self.name2table[table.name] = table
 
-        if os.environ["RTOS_ENGINE"] == "sql":
+        if config["database"]["engine"] == "sql":
             for idx, table_tree in enumerate(parse_tree):
                 table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
                 add_table(TableSQL(table_tree["CreateStmt"]), idx)
 
-        elif os.environ["RTOS_ENGINE"] == "sparql":
-            relations = open(os.path.join(Config().JOBDir, 'relations.txt'), 'r').read().splitlines()
+        elif config["database"]["engine"] == "sparql":
+            relations = open(os.path.join(config["database"]["JOBDir"], 'relations.txt'), 'r').read().splitlines()
             for idx, rel in enumerate(relations):
                 add_table(TableISQL(rel), idx)
         else:
-            raise ValueError(f"Unknown value {os.environ.get('RTOS_ENGINE')} for env variable RTOS_ENGINE")
+            raise ValueError(f"Unknown value {self.config['database']['engine']} for key database->engine")
 
         self.columns_total = 0
 

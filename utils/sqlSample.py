@@ -4,7 +4,6 @@ from collections_extended.setlists import SetList
 from torch._C import device
 from torchfold.torchfold import Fold
 
-from ImportantConfig import Config
 from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
 from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL
 from utils.TreeLSTM import SPINN
@@ -23,12 +22,12 @@ from itertools import count
 import numpy as np
 from psqlparse import parse_dict
 import os
+import yaml
 import graphviz as gv
 from collections_extended import setlist
 
-config = Config()
-
-NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 3
+config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
+NB_FEATURE_SLOTS = 2 if config["database"]["engine"] == "sql" else 3
 
 class sqlInfo:
     def __init__(self, runner: DBRunner, sql: str, filename: str):
@@ -81,8 +80,9 @@ class JoinTree:
         self.device = device
         self.aliasname2fromtable={}
 
-        format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
-        self.join_tree_repr = gv.Digraph(format=format, graph_attr={"rankdir": "TB"})
+        if config["logging"]["use_graphviz"]:
+            format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
+            self.join_tree_repr = gv.Digraph(format=format, graph_attr={"rankdir": "TB"})
 
         logging.debug(f"\nFile name: {self.sqlt.filename}\nSQL: {self.sql}")
 
@@ -302,7 +302,7 @@ class JoinTree:
         """
         self.table_fea_set = {}
         for aliasname in self.aliasnames_root_set:
-            self.table_fea_set[aliasname] = [0.0]*(config.max_column_in_table * NB_FEATURE_SLOTS)
+            self.table_fea_set[aliasname] = [0.0]*(config["model"]["max_column_in_table"] * NB_FEATURE_SLOTS)
             self.join_list[aliasname] = []
 
         self.join_candidate: Set[Tuple[str, str]] = setlist()
@@ -325,7 +325,7 @@ class JoinTree:
                 left_aliasname = comparison.aliasname_list[0]
                 right_aliasname = comparison.aliasname_list[1]
 
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if config["database"]["engine"] == "sparql":
                     tmp = list(filter(lambda x: left_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -341,7 +341,7 @@ class JoinTree:
                         )
                     left_aliasname = tmp[0]
 
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if config["database"]["engine"] == "sparql":
                     tmp = list(filter(lambda x: right_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -370,7 +370,7 @@ class JoinTree:
                 left_table_class = db_info.name2table[left_fullname]
 
                 left_column = comparison.column_list[0]
-                # if os.environ['RTOS_ENGINE'] == "sparql":
+                # if config["database"]["engine"] == "sparql":
                 #     tmp = list(filter(lambda x: left_column in x, left_table_class.column2idx.keys()))
                 #     if len(tmp) > 1: 
                 #         raise ValueError(
@@ -390,7 +390,7 @@ class JoinTree:
 
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
 
-                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
+                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
                 self.join_list[right_aliasname].append((left_aliasname,comparison))
@@ -401,7 +401,7 @@ class JoinTree:
 
                 right_column = comparison.column_list[1]
                 
-                # if os.environ['RTOS_ENGINE'] == "sparql":
+                # if config["database"]["engine"] == "sparql":
                 #     tmp = list(filter(lambda x: right_column in x, right_table_class.column2idx.keys()))
                 #     if len(tmp) > 1: 
                 #         raise ValueError(
@@ -420,7 +420,7 @@ class JoinTree:
                 table_idx = right_table_class.column2idx[right_column]
                 self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
                 
-                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
+                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
 
@@ -436,7 +436,7 @@ class JoinTree:
             else: 
                 left_aliasname = comparison.aliasname_list[0]
                     
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if config["database"]["engine"] == "sparql":
                     tmp = list(filter(lambda x: left_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -459,7 +459,7 @@ class JoinTree:
                 left_table_class = db_info.name2table[left_fullname]
 
                 left_column = comparison.column_list[0]
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if config["database"]["engine"] == "sparql":
                     tmp = list(filter(lambda x: left_column == x, left_table_class.column2idx.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -482,7 +482,7 @@ class JoinTree:
                 )
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 1] += selectivity
 
-                if os.environ['RTOS_ENGINE'] == "sparql" and os.environ["RTOS_SPARQL_EXTRA_FEAT"] == "yes":
+                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] += selectivity
 
         for aliasname in self.aliasnames_root_set:
@@ -501,7 +501,7 @@ class JoinTree:
             for comparison in self.filter_list[filter_table]:
                 aliasname = comparison.aliasname_list[0]
 
-                if os.environ['RTOS_ENGINE'] == "sparql":
+                if config["database"]["engine"] == "sparql":
                     tmp = list(filter(lambda x: aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -521,7 +521,7 @@ class JoinTree:
                 table = self.db_info.name2table[fullname]
                 for column in comparison.column_list:
 
-                    # if os.environ['RTOS_ENGINE'] == "sparql":
+                    # if config["database"]["engine"] == "sparql":
                     #     tmp = list(filter(lambda x: column in x, table.column2idx.keys()))
                     #     if len(tmp) > 1: 
                     #         raise ValueError(
@@ -557,7 +557,7 @@ class JoinTree:
         self.left_son = {}
         self.right_son = {}
 
-        if os.environ['RTOS_ENGINE'] == "sql":
+        if config["database"]["engine"] == "sql":
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.from_table_list])
         else:
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
@@ -629,12 +629,14 @@ class JoinTree:
             left_son = self.left_son[node]
             right_son = self.right_son[node]
 
-            self.join_tree_repr.node(str(hash(node)), str(node))
-            self.join_tree_repr.node(str(hash(left_son)), str(left_son))
-            self.join_tree_repr.node(str(hash(right_son)), str(right_son))
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.node(str(hash(node)), str(node))
+                self.join_tree_repr.node(str(hash(left_son)), str(left_son))
+                self.join_tree_repr.node(str(hash(right_son)), str(right_son))
 
             leftRes = self.recTableISQL(left_son)
-            self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
             res.update(leftRes)
             
             filter_list = []
@@ -659,7 +661,8 @@ class JoinTree:
                             on_list.append(comparison.toString())
             
             rightRes = self.recTableISQL(right_son)
-            self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
             res.update(rightRes)
 
             # inner join
@@ -681,11 +684,11 @@ class JoinTree:
             if not left_son in self.aliasnames:
                 leftRes = leftRes[1:-1]
 
-            self.join_tree_repr.node(str(hash(node)), str(node))
-            self.join_tree_repr.node(str(hash(left_son)), str(left_son))
-            self.join_tree_repr.node(str(hash(right_son)), str(right_son))
-
-            self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.node(str(hash(node)), str(node))
+                self.join_tree_repr.node(str(hash(left_son)), str(left_son))
+                self.join_tree_repr.node(str(hash(right_son)), str(right_son))
+                self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
 
             res += leftRes + "\n"
             filter_list = []
@@ -720,7 +723,8 @@ class JoinTree:
                 res += "cross join "
                 res += rightRes
 
-            self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
 
             res += ")"
             return res
@@ -734,7 +738,7 @@ class JoinTree:
             left_aliasname = self.left_aliasname[node]
             right_aliasname = self.right_aliasname[node]
 
-            offset = int(config.n_words/2)
+            offset = int(config["model"]["n_words"]/2)
 
             left_node_id = self.db_info.name2idx[self.aliasname2fullname[left_aliasname]]
             right_node_id = self.db_info.name2idx[self.aliasname2fullname[right_aliasname]]
@@ -777,7 +781,7 @@ class JoinTree:
             left_aliasname = self.left_aliasname[node]
             right_aliasname = self.right_aliasname[node]
 
-            offset = int(config.n_words/2)
+            offset = int(config["model"]["n_words"]/2)
 
             left_emb,c1 = fold.add('leaf',self.db_info.name2idx[self.aliasname2fullname[left_aliasname]]+offset,self.table_fea_set[left_aliasname]).split(2)
             right_emb,c2 = fold.add('leaf',self.db_info.name2idx[self.aliasname2fullname[right_aliasname]]+offset,self.table_fea_set[right_aliasname]).split(2)
@@ -803,7 +807,7 @@ class JoinTree:
         root = self.total - 1
         logging.debug(f"Root: {root}")
 
-        if os.environ["RTOS_ENGINE"] == "sql":
+        if config["database"]["engine"] == "sql":
             res = "select "+",\n".join([str(x) for x in self.target_table_list])+"\n"
             res += "from " + self.recTableSQL(root)[1:-1]
             res += ";"
@@ -813,8 +817,9 @@ class JoinTree:
             res += "\n};"
 
         # Graphviz
-        # fn = os.path.basename(self.sqlt.filename).split('.')[0]
-        # self.join_tree_repr.render(os.path.join(config.JOBDir, fn, f"{fn}_{hash(self)}.gv"))
+        if config["logging"]["use_graphviz"]:
+            fn = os.path.basename(self.sqlt.filename).split('.')[0]
+            self.join_tree_repr.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_{hash(self)}.gv"))
 
         logging.debug("Proposed plan:")
         logging.debug(res)

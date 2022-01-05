@@ -8,3 +8,5 @@ pyparsing==2.4.7
 tqdm==4.62.3
 graphviz==0.18.2
 collections-extended==2.0.0
+pandas
+scipy

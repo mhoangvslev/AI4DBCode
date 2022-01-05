@@ -3,9 +3,11 @@ import logging
 import math
 import os
 import random
+import time
 from typing import Any, List, Tuple, Union
 from torch._C import device
 from torch.functional import Tensor
+from torch.types import Number
 import torchfold
 import torch.nn.functional as F
 #import torchvision.transforms as T
@@ -14,7 +16,6 @@ from collections import namedtuple
 from torchfold.torchfold import Fold
 
 from tqdm import tqdm
-from ImportantConfig import Config
 from utils.DBUtils import DBRunner
 from utils.JOBParser import DB
 from utils.TreeLSTM import SPINN
@@ -29,18 +30,20 @@ from scipy.stats import gmean
 FOOP_CONST=10e13
 
 class ENV(object):
-    def __init__(self, sql: sqlInfo, db_info: DB, pgrunner: DBRunner, device: device, rewarder: str):
+    def __init__(self, sql: sqlInfo, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
+        self.config = config
         self.sel = JoinTree(sql,db_info,pgrunner,device)
         self.sql = sql
         self.hashs = ""
         self.table_set = set([])
         self.res_table = []
         self.init_table = None
-        self.planSpace = int(os.environ["RTOS_JTREE_BUSHY"]) #0:leftDeep,1:bushy
+        self.planSpace = int(config["database"]["use_bushy_tree"]) #0:leftDeep,1:bushy
         self.terminate = False
 
-        logging.debug(f"Rewarder: {rewarder}")
-        self._rewarder = rewarder
+        self._rewarder = config["model"]["rewarder"]
+        logging.debug(f"Rewarder: {self._rewarder}")
+
 
     def getPlan(self):
         return self.sel.plan
@@ -136,7 +139,7 @@ class ENV(object):
         Returns:
             [type]: [description]
         """
-        table_list = self.sel.all_table_list if os.environ['RTOS_ENGINE'] == "sparql" else self.sel.from_table_list
+        table_list = self.sel.all_table_list if self.config['database']['engine'] == "sparql" else self.sel.from_table_list
         total = self.sel.total + 1
         logging.debug(f"Selected total: {total} out of {len(table_list)}")
 
@@ -146,17 +149,17 @@ class ENV(object):
             baseline_cost = self.sql.getDPlatency()
 
             if self._rewarder == "rtos":
-                return max(cost/baseline_cost - 1, 0), True
+                return cost, max(cost/baseline_cost - 1, 0), True
             elif self._rewarder == "cost-improvement":
-                return min(max(np.log10(cost / baseline_cost), -10), 10), True
+                return cost, min(max(np.log10(cost / baseline_cost), -10), 10), True
             elif self._rewarder == "cost":
-                return cost, True
+                return cost, cost, True
             elif self._rewarder == "foop-cost":
-                return 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10, True
+                return cost, 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10, True
             else:
                 raise NotImplementedError(f"No handler for rewarder of type {self._rewarder}!")
         else:
-            return 0,False
+            return None,0,False
 
 
 
@@ -202,7 +205,8 @@ class ReplayMemory(object):
         self.bestJoinTreeValue = {}
 
 class DQN:
-    def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device, rewarder: str):
+    def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
+        self.config = config
         self.Memory = ReplayMemory(1000)
         self.BATCH_SIZE = 1
 
@@ -219,7 +223,6 @@ class DQN:
         self.pgrunner = pgrunner
         self.device = device
         self.steps_done = 0
-        self.rewarder = rewarder
 
     def select_action(self, env: ENV, need_random = True) -> Tuple[Tensor, Tuple[str, str], Tensor]:
         """Decide the next action. During earlier episodes, actions will be chosen randomly but as the training goes on, only actions with minimal costs are chosen
@@ -257,7 +260,7 @@ class DQN:
             )
 
 
-    def validate(self, val_list: List[sqlInfo], tryTimes = 1) -> Union[float, float]:
+    def validate(self, val_list: List[sqlInfo], tryTimes = 1, **infos) -> Union[float, float]:
         """[summary]
 
         MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.
@@ -279,9 +282,10 @@ class DQN:
         rewards = []
         prt = []
         mes = 0
+        result = None
         for sql in val_list:
             pg_cost = sql.getDPlatency()
-            env = ENV(sql,self.db_info,self.pgrunner,self.device, self.rewarder)
+            env = ENV(sql,self.db_info,self.pgrunner,self.device, self.config)
 
             for t in count():
                 action_list, chosen_action, all_action = self.select_action(env,need_random=False)
@@ -290,24 +294,33 @@ class DQN:
                 right = chosen_action[1]
                 env.takeAction(left,right)
 
-                reward, done = env.reward()
+                cost, reward, done = env.reward()
                 if done:
                     rewards.append(reward)
                     mes += reward
 
-                    fn = os.path.join(Config().JOBDir, "summary.csv")
-                    pd.DataFrame(
-                        [[t, sql.filename, reward, mes]], 
-                        columns=["step", "query", "reward", "mes"]
-                    ).to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                    data = {
+                            "query": sql.filename,
+                            "step": t,
+                            "reward": reward,
+                            "cost": cost,
+                            "base-cost": pg_cost
+                    }
+                    data.update(infos)
+
+                    if result is None:
+                        result = pd.DataFrame(data, index=[0])
+                    else:
+                        result = result.append(data, ignore_index=True)
+
                     break
 
-        mrc, gmrl = np.average(rewards), gmean(rewards)       
-        logging.debug(f"MRC: {mrc}n GMRL: {gmrl}")
-        return mrc, gmrl
+        mrc, gmrl = np.average(rewards), gmean(rewards)     
 
-    def optimize_model(self,):
-        import time
+        logging.debug(f"MRC: {mrc}n GMRL: {gmrl}")
+        return result
+
+    def optimize_model(self) -> Tuple[Number, float, float]:
         startTime = time.time()
         samples = self.Memory.sample(64)
         value_now_list = []
@@ -332,10 +345,15 @@ class DQN:
         value_now = torch.cat(value_now_list,dim = 0)
         next_value = torch.cat(next_value_list,dim = 0)
         endTime = time.time()
-        if True:
-            loss = F.smooth_l1_loss(value_now,next_value,size_average=True)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            return loss.item()
-        return None
+
+        pre_descend_time = endTime - startTime
+        loss = F.smooth_l1_loss(value_now,next_value,size_average=True)
+        self.optimizer.zero_grad()
+
+        delta_start = time.time()
+        loss.backward()
+        delta_end = time.time()
+        delta_gd_time = delta_end - delta_start
+
+        self.optimizer.step()
+        return loss.item(), pre_descend_time * 1e3, delta_gd_time * 1e3

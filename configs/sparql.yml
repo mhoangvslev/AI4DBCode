@@ -1,0 +1,50 @@
+cost-training:
+  database:
+    engine: sparql
+    syntheticDir: "Queries/sytheic"
+    JOBDir: "JOB-queries/sparql"
+
+    # Postgres
+    pg_schema_file: "schema.sql"
+    pg_password: "123456"
+    pg_user: "postgres"
+    pg_dbname: "imdbload"
+    pg_host: "0.0.0.0"
+    pg_port: "5432"
+
+    # Virtuoso
+    isql_endpoint: "sparql"
+    isql_graph: "http://example.com/DAV/void"
+    isql_host: localhost
+    isql_port: 8890
+    use_bushy_tree: false # Not available for sparql
+    tree_num_in_net: 40
+  
+    # Experimental
+    isql_featurization_v2: false
+    
+  model:
+    # Featurization
+    max_column_in_table: 15
+    feature_size: 128
+    n_words: 1000
+
+    # Train
+    name: "cost-training-50k"
+    n_episodes: 50000
+    data: sparql
+    save_every: 10
+    update_target_every: 3
+    rewarder: "cost-improvement"
+    device: cpu
+    checkpoint: "checkpoint-50k.yml"
+
+  logging:
+    debug: 2 # 0 = None, 1 = console, 2 = file
+    use_wandb: false
+    use_graphviz: false
+    incl_mes: true
+    incl_mrc: true
+    incl_dqn_gd_time: true
+    incl_reward: true
+

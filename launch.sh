@@ -7,22 +7,6 @@ syntax_error(){
     "
 }
 
-export RTOS_SCHEMA_FILE="schema.sql"
-export RTOS_DB_PASSWORD="123456"
-export RTOS_DB_USER="postgres"
-export RTOS_DB_NAME="imdbload"
-export RTOS_DB_HOST="0.0.0.0"
-export RTOS_DB_PORT="5432"
-export RTOS_ISQL_ENDPOINT="sparql"
-export RTOS_ISQL_GRAPH="http://example.com/DAV/void"
-export RTOS_ISQL_HOST="localhost" RTOS_ISQL_PORT="8890"
-export RTOS_JTREE_BUSHY=0
-export RTOS_PYTORCH_DEVICE="gpu"
-export RTOS_GV_FORMAT="png"
-export RTOS_ENGINE="$3"
-export RTOS_JOB_DIR="JOB-queries/$3$DEBUG"
-export RTOS_SPARQL_EXTRA_FEAT="no"
-
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
     if [ "$3" = "init" ]; then
@@ -43,13 +27,10 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
         echo "Making attempt #$attempt...";
         sleep 1;
 
-        echo $test
-
         if [ "$attempt" = "$3" ]; then
             echo "Virtuoso did not launched successfully. It could be:
                 (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
-                (2) Check log below
-            $test
+                (2) Check error message
             "
             exit 1
         fi
@@ -59,20 +40,6 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
-        -e RTOS_JOB_DIR="JOB-queries/$3" \
-        -e RTOS_SCHEMA_FILE="schema.sql" \
-        -e RTOS_DB_PASSWORD="123456" \
-        -e RTOS_DB_USER="postgres" \
-        -e RTOS_DB_NAME="imdbload" \
-        -e RTOS_DB_HOST="0.0.0.0" \
-        -e RTOS_DB_PORT="5432" \
-        -e RTOS_ISQL_ENDPOINT="sparql" \
-        -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-        -e RTOS_ISQL_HOST="localhost" \
-        -e RTOS_ISQL_PORT="8890" \
-        -e RTOS_PYTORCH_DEVICE="gpu" \
-        -e RTOS_JTREE_BUSHY=0 \
-        -e RTOS_ENGINE="$3" \
         --network host \
         -v $(realpath ./models):/workplace/models \
         -v $(realpath ./log):/workplace/log \
@@ -86,20 +53,6 @@ elif [ "$1" = "start" -a "$2" = "rtos-gpu" ]; then
         --device /dev/nvidia0 --device /dev/nvidia-modeset \
         --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools \
         --device /dev/nvidiactl \
-        -e RTOS_JOB_DIR="JOB-queries/$3" \
-        -e RTOS_SCHEMA_FILE="schema.sql" \
-        -e RTOS_DB_PASSWORD="123456" \
-        -e RTOS_DB_USER="postgres" \
-        -e RTOS_DB_NAME="imdbload" \
-        -e RTOS_DB_HOST="0.0.0.0" \
-        -e RTOS_DB_PORT="5432" \
-        -e RTOS_ISQL_ENDPOINT="sparql" \
-        -e RTOS_ISQL_GRAPH="http://example.com/DAV/void" \
-        -e RTOS_ISQL_HOST="localhost" \
-        -e RTOS_ISQL_PORT="8890" \
-        -e RTOS_PYTORCH_DEVICE="gpu" \
-        -e RTOS_JTREE_BUSHY=0 \
-        -e RTOS_ENGINE="$3" \
         --network host \
         -v $(realpath ./models):/workplace/models \
         -v $(realpath ./log):/workplace/log \
@@ -116,35 +69,21 @@ elif [ "$1" = "build" ]; then
     fi
 elif [ "$1" = "cost-training" ]; then
     rm -f *.log
-    if [ "$2" = "train" ]; then
-        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
-            python CostTraining.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
-    elif [ "$2" = "predict" ]; then
-        python CostTraining.py --log_level "DEBUG" --mode "predict" --reward "$4" --queryfile "$5" 
-    fi
+    export RTOS_TRAINTYPE="cost-training"
+    shift;
+    python CostTraining.py $*
 
 elif [ "$1" = "latency-tuning" ]; then
     rm -f *.log
-    if [ "$2" = "train" ]; then
-        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
-        RTOS_JOB_DIR="JOB-queries/$3$DEBUG" \
-            python LatencyTuning.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
-    elif [ "$2" = "predict" ]; then
-        python LatencyTuning.py --mode "predict" --reward "$4" --queryfile "$5" 
-    fi
+    export RTOS_TRAINTYPE="latency-tuning"
+    shift;
+    python LatencyTuning.py $*
 
 elif [ "$1" = "train" ]; then 
     rm -f *.log
-    if [ "$2" = "train" ]; then
-        find JOB-queries/$3$DEBUG -mindepth 1 -type d -exec rm -rf '{}' \;
-        find JOB-queries/$3$DEBUG/*.csv -type f -exec rm '{}' \;
-        python train.py --mode "train" --reward "$4" --n_episodes $5 --queryfile "$6" 
-    elif [ "$2" = "predict" ]; then
-        python train.py --mode "predict" --reward "$4" --queryfile "$5" 
-    fi
+    export RTOS_TRAINTYPE="train"
+    shift;
+    python train.py $*
 else
     syntax_error;
 fi

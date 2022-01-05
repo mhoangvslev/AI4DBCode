@@ -59,7 +59,6 @@ services:
       - ./log:/workplace/log 
       - /tmp:/tmp
     networks: [ postgresNetwork ]
-    #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "python CostTraining.py"'
 
 networks:
   postgresNetwork:

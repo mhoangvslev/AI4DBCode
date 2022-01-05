@@ -5,7 +5,10 @@ import torchfold
 import torch.nn as nn
 import os
 
-NB_FEATURE_SLOTS = 2 if os.environ["RTOS_ENGINE"] == "sql" else 3
+import yaml
+
+config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
+NB_FEATURE_SLOTS = 2 if config["database"]["engine"] == "sql" else 3
 
 class TreeLSTM(nn.Module):
     def __init__(self, num_units):

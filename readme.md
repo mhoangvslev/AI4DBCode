@@ -67,8 +67,7 @@ sh launch.sh start postgres init path/to/imdb_pg11 #Load the dump into base
 sh launch.sh build rtos-cpu|gpu # Build rtos container
 sh launch.sh start rtos-cpu|gpu # Launch it in background
 
-python CostTraining.py
-python LatencyTuning.py
+sh launch.sh cost-training|latency-tuning train|predict sql|sparql reward_type [ n_episodes input_files ]
 ```
 
 # Questions
