@@ -1,14 +1,15 @@
 import logging
-from typing import Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 from collections_extended.setlists import SetList
 from torch._C import device
 from torchfold.torchfold import Fold
+from Utils.DB.DBUtils import DBRunner, ISQLRunner, PGRunner
+from Utils.DB.Query import Query
 
-from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL, ValuesISQL
-from utils.TreeLSTM import SPINN
-from utils.parser.parsed_query import ParsedQuery
-from utils.parser.parser import QueryParser
+from Utils.parser.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL, ValuesISQL
+from Utils.TreeLSTM import SPINN
+from Utils.parser.parsed_query import ParsedQuery
+from Utils.parser.parser import QueryParser
 
 # from pyrdf2vec import RDF2VecTransformer
 # from pyrdf2vec.embedders import Word2Vec
@@ -29,46 +30,11 @@ from collections_extended import setlist
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 NB_FEATURE_SLOTS = 2 if config["database"]["engine"] == "sql" else 3
 
-class sqlInfo:
-    def __init__(self, runner: DBRunner, sql: str, filename: str):
-        self.DPLantency = None
-        self.DPCost = None
-        self.bestLatency = None
-        self.bestCost = None
-        self.bestOrder = None
-        self.plTime = None
-        self.runner = runner
-        self.sql = sql
-        self.filename = filename
-
-    def getDPlatency(self, forceLatency=False):
-        if self.DPLantency == None:
-            self.DPLantency = self.runner.getLatency(self,self.sql, forceLatency=forceLatency)
-        return self.DPLantency
-    def getDPPlantime(self,):
-        if self.plTime == None:
-            self.plTime = self.runner.getDPPlanTime(self,self.sql)
-        return self.plTime
-    def getDPCost(self,):
-        if self.DPCost == None:
-            self.DPCost = self.runner.getCost(self,self.sql)
-        return self.DPCost
-    def timeout(self,):
-        if self.DPLantency == None:
-            return 1000000
-        return self.getDPlatency()*4+self.getDPPlantime()
-    def getBestOrder(self,):
-        return self.bestOrder
-    def updateBestOrder(self,latency,order):
-        if self.bestOrder == None or self.bestLatency > latency:
-            self.bestLatency = latency
-            self.bestOrder = order
-
 tree_lstm_memory = {}
 class JoinTree:
     """Where the magic happens
     """
-    def __init__(self, sqlt: sqlInfo, db_info: DB, runner: DBRunner, device: device):
+    def __init__(self, sqlt: Query, db_info: DB, runner: DBRunner, device: device):
         global tree_lstm_memory
         self.nbFilters = 0
         tree_lstm_memory = {}

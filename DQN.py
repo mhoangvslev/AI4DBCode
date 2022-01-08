@@ -16,10 +16,10 @@ from collections import namedtuple
 from torchfold.torchfold import Fold
 
 from tqdm import tqdm
-from utils.DBUtils import DBRunner
-from utils.JOBParser import DB
-from utils.TreeLSTM import SPINN
-from utils.sqlSample import JoinTree, sqlInfo
+from Utils.DB.DBUtils import DBRunner
+from Utils.parser.JOBParser import DB
+from Utils.TreeLSTM import SPINN
+from Utils.DB.QueryUtils import JoinTree, Query
 import torch.optim as optim
 import numpy as np
 from math import log
@@ -30,7 +30,7 @@ from scipy.stats import gmean
 FOOP_CONST=10e13
 
 class ENV(object):
-    def __init__(self, sql: sqlInfo, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
+    def __init__(self, sql: Query, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
         self.config = config
         self.sel = JoinTree(sql,db_info,pgrunner,device)
         self.sql = sql
@@ -262,7 +262,7 @@ class DQN:
             )
 
 
-    def validate(self, val_list: List[sqlInfo], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:
+    def validate(self, val_list: List[Query], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:
         """[summary]
 
         MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.

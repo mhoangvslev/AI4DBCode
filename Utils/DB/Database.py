@@ -3,7 +3,6 @@ import os
 
 from typing import Dict, Any
 
-
 class Database():
 
     def __init__(self, config: Dict[str, Any]):

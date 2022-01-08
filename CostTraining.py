@@ -4,16 +4,16 @@ from datetime import datetime
 from glob import glob
 import subprocess
 from typing import AnyStr, List, Tuple
-from utils.DBUtils import PGRunner, ISQLRunner
-from utils.sqlSample import sqlInfo
+from Utils.DB.DBUtils import PGRunner, ISQLRunner
+from Utils.DB.QueryUtils import Query
 import numpy as np
 from itertools import count
 from math import log
 import random
 import time
 from DQN import DQN,ENV
-from utils.TreeLSTM import SPINN
-from utils.JOBParser import DB
+from Utils.TreeLSTM import SPINN
+from Utils.parser.JOBParser import DB
 import copy
 import torch
 from torch.nn import init
@@ -128,7 +128,7 @@ class CostTraining:
 
         self.dqn = DQN(self.policy_net,self.target_net,self.db_info,self.runner, self.device, config=config)
 
-    def k_fold(self, input_list: List[sqlInfo],k,ix = 0) -> Tuple[List[sqlInfo], List[sqlInfo]]:
+    def k_fold(self, input_list: List[Query],k,ix = 0) -> Tuple[List[Query], List[Query]]:
         li = len(input_list)
         kl = (li-1)//k + 1
         train = []
@@ -141,7 +141,7 @@ class CostTraining:
         return train, validate
 
 
-    def QueryLoader(self, QueryDir: str) -> List[sqlInfo]:
+    def QueryLoader(self, QueryDir: str) -> List[Query]:
         def file_name(file_dir):
             import os
             L = []
@@ -156,10 +156,10 @@ class CostTraining:
             with open(filename, "r") as f:
                 data = f.readlines()
                 one_sql = "".join(data)
-                sql_list.append(sqlInfo(self.runner,one_sql,filename))
+                sql_list.append(Query(self.runner,one_sql,filename))
         return sql_list
 
-    def resample_sql(self, sql_list: List[sqlInfo]):
+    def resample_sql(self, sql_list: List[Query]):
         rewards = []
         reward_sum = 0
         rewardsP = []
@@ -195,7 +195,7 @@ class CostTraining:
                     break
         return res_sql+sql_list
 
-    def train(self, trainSet: List[sqlInfo], validateSet: List[sqlInfo], n_episodes=10000):
+    def train(self, trainSet: List[Query], validateSet: List[Query], n_episodes=10000):
 
         trainSet_temp = trainSet
         losses = []
@@ -314,7 +314,7 @@ class CostTraining:
 
         for queryfile in tqdm(queryfiles):
             logging.debug(f"Processing {queryfile}...")
-            sqlt = sqlInfo(self.runner, open(queryfile, "r").read(), queryfile)
+            sqlt = Query(self.runner, open(queryfile, "r").read(), queryfile)
 
             sql_out = os.path.join("models", self.config["model"]["name"], "prediction", os.path.basename(sqlt.filename))
             os.makedirs(os.path.dirname(sql_out), exist_ok=True)

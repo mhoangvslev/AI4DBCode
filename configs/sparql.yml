@@ -14,11 +14,18 @@ cost-training:
 
     # Virtuoso
     isql_endpoint: "sparql"
-    isql_graph: "http://example.com/DAV/void"
     isql_host: localhost
-    isql_port: 8890
+
+    # isql_graph: "http://example.com/DAV/void"
+    # isql_port: 8890
     use_bushy_tree: false # Not available for sparql
     tree_num_in_net: 40
+
+    # SaGe
+    isql_port: 8060
+    isql_graph: "http://localhost:8060/sparql"
+    sage_max_steps: 12000
+    sage_convergence_threshold: 10
   
     # Experimental
     isql_featurization_v2: false

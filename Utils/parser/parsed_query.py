@@ -1,7 +1,7 @@
 from typing import List, Dict, Set
 from rdflib.plugins.sparql.parserutils import Expr
 
-from utils.database import Database
+from Utils.DB.Database import Database
 
 
 class ParsedQuery():

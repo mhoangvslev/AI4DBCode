@@ -32,6 +32,17 @@ services:
       - '${VIRTUOSO_DB}:/root/virtuoso-opensource/database'
       - '/tmp:/tmp'
     command: bash -c "./virtuoso-t +configfile ../database/virtuoso.ini && flask run --host=0.0.0.0 --port=4000"
+  
+  sage-engine:
+    container_name: sage-engine
+    image: "minhhoangdang/sage-engine:py394-rlxp"
+    ports:
+      - '8080:8080'
+    volumes:
+      - '${SAGE_GRAPH}:/root/sage-engine/graphs'
+      - '${SAGE_CONFIG}:/root/sage-engine/config'
+    entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "poetry run sage config/sage.yaml --workers=1 --port=8080"'
+    #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "sh launch.sh sage"'
     
   rtos:
     depends_on: 

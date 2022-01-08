@@ -37,6 +37,27 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     done
 
     echo "Virtuoso is succesfully setup!"
+
+elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
+    VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d sparql;
+    attempt=0
+
+    until echo $(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql') | grep -o "http://example.com/DAV/void" ; 
+    do
+        attempt=$(expr $attempt + 1)
+        echo "Making attempt #$attempt...";
+        sleep 1;
+
+        if [ "$attempt" = "$3" ]; then
+            echo "Virtuoso did not launched successfully. It could be:
+                (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
+                (2) Check error message
+            "
+            exit 1
+        fi
+    done
+
+    echo "Virtuoso is succesfully setup!"
     
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \
