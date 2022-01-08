@@ -23,6 +23,7 @@ import graphviz as gv
 import pandas as pd
 import logging
 import yaml
+import ast
 
 class CostTraining:
     def __init__(self, config: dict) -> None:
@@ -173,12 +174,8 @@ class CostTraining:
                 right = chosen_action[1]
                 env.takeAction(left,right)
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 if done:
-                    # mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
-                    # rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
-                    # mes += reward*log(1.5)-log(pg_cost)
-
                     mrc = reward
                     rewardsP.append(mrc)
                     mes += mrc
@@ -215,7 +212,6 @@ class CostTraining:
             #     sql = random.sample(train_list_back,1)[0][0]
             sqlt = random.sample(trainSet[0:],1)[0]
             env = ENV(sqlt,self.db_info,self.runner,self.device, self.config)
-            pg_cost = sqlt.getDPlatency()
 
             if config["logging"]["use_graphviz"]:
                 format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
@@ -247,7 +243,7 @@ class CostTraining:
                     fn = os.path.basename(sqlt.filename).split('.')[0]
                     decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
 
                 previous_state_list.append((value_now,next_value.view(-1,1),env_now))
@@ -285,7 +281,7 @@ class CostTraining:
                     losses.append(loss)
                     if (i_episode%print_every==0):
                         logging.debug(np.mean(losses))
-                        logging.debug(f"###################### Epoch {i_episode//print_every}, baseline-cost = {pg_cost}")
+                        logging.debug(f"###################### Epoch {i_episode//print_every}")
                         
                         training_time = time.time()-startTime
 
@@ -297,7 +293,7 @@ class CostTraining:
                            "loss": np.mean(losses)
                         }
 
-                        summary = self.dqn.validate(validateSet, **infos)
+                        _, summary = self.dqn.validate(validateSet, infos=infos)
                         fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
                         summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
 
@@ -314,11 +310,18 @@ class CostTraining:
         torch.save(self.policy_net.cpu().state_dict(), os.path.join("models", self.config["model"]["name"], 'CostTraining.pth'))
         # policy_net = policy_net.cuda()
 
-    def predict(self, queryfiles: List[AnyStr]) -> str:
+    def predict(self, queryfiles: List[AnyStr], forceLatency=False) -> str:
 
-        for queryfile in queryfiles:
+        for queryfile in tqdm(queryfiles):
             logging.debug(f"Processing {queryfile}...")
             sqlt = sqlInfo(self.runner, open(queryfile, "r").read(), queryfile)
+
+            sql_out = os.path.join("models", self.config["model"]["name"], "prediction", os.path.basename(sqlt.filename))
+            os.makedirs(os.path.dirname(sql_out), exist_ok=True)
+
+            if os.path.exists(sql_out):
+                continue
+
             env = ENV(sqlt,self.db_info,self.runner,self.device, self.config)
 
             previous_state_list = []
@@ -350,7 +353,7 @@ class CostTraining:
                 # fn = os.path.basename(sqlt.filename).split('.')[0]
                 # decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
 
                 previous_state_list.append((value_now,next_value.view(-1,1),env_now))
@@ -388,7 +391,12 @@ class CostTraining:
                         "loss": loss
                     }
 
-                    summary = self.dqn.validate([sqlt], **infos)
+                    prediction, summary = self.dqn.validate([sqlt], forceLatency=forceLatency, infos=infos)
+
+                    with open(sql_out, mode="w") as f:
+                        f.write(prediction)
+                        f.close()
+
                     fn = os.path.join("models", self.config["model"]["name"], "summary-predict.csv")
                     summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
 
@@ -399,21 +407,22 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default="train", help='train | predict')
     parser.add_argument('--queryfile', type=str, default="", nargs="*", help="Relative path to queryfile")
-    parser.add_argument('--restart', type=bool, default=False, help='Whether or not start the training from scratch.')
-    args = parser.parse_args()
+    parser.add_argument('--from-scratch', default=False, action='store_true', help='Whether or not start the training from scratch.')
+    parser.add_argument('--force-latency', default=False, action='store_true', help='Only in predict mode: Log the latency instead of the cost.')
 
+    args = parser.parse_args()
     config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
-    if args.restart:
+    if args.mode == "train" and args.from_scratch:
         subprocess.Popen(
             f"rm -rf {os.path.join('models', config['model']['name'])}", 
             shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).communicate()
 
-    subprocess.Popen(
-        f"mkdir -p {os.path.join('models', config['model']['name'])}", 
-        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    ).communicate()
+        subprocess.Popen(
+            f"mkdir -p {os.path.join('models', config['model']['name'])}", 
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ).communicate()
 
     ct = CostTraining(config=config)
 
@@ -424,6 +433,7 @@ if __name__=='__main__':
         Q4,Q1 = ct.k_fold(JOBQueries,10,1)
         # logging.debug(Q4,Q1)
         ct.train(Q4+sytheticQueries,Q1, n_episodes=config['model']['n_episodes'])
+    
     elif args.mode == "predict":
         queryfiles: List[AnyStr] = []
         for q in args.queryfile:
@@ -431,4 +441,15 @@ if __name__=='__main__':
 
         print(queryfiles)
 
-        ct.predict(queryfiles)
+        if args.from_scratch:
+            subprocess.Popen(
+                f"rm -rf {os.path.join('models', config['model']['name'], 'prediction')}", 
+                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            ).communicate()
+
+            subprocess.Popen(
+                f"rm -f {os.path.join('models', config['model']['name'], 'summary.predict.csv')}", 
+                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            ).communicate()
+
+        ct.predict(queryfiles, forceLatency=args.force_latency)

@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import List, Tuple, Union
+from typing import Dict, List, OrderedDict, Tuple, Union
 import numpy as np
 from rdflib.plugins.sparql.operators import Builtin_REGEX, Builtin_STR, ConditionalAndExpression, ConditionalOrExpression, RelationalExpression, UnaryMinus, UnaryNot, UnaryPlus
 from torch._C import BoolType, Value
@@ -9,6 +9,7 @@ from rdflib.term import Literal, Variable, URIRef
 from rdflib.plugins.sparql import parserutils
 from torch.functional import einsum
 import yaml
+from collections_extended import setlist
 
 class TargetTableSQL:
     def __init__(self, target):
@@ -197,7 +198,6 @@ class JoinISQL:
     def getTargetTable(self) -> TargetTableISQL:
         return self.targetJoin
 
-
 class ExprSQL:
     def __init__(self, expr,list_kind = 0):
         self.expr = expr
@@ -252,6 +252,36 @@ class ExprSQL:
 
         else:
             raise "No Known type of Expr"
+
+class ValuesISQL:
+    def __init__(self, values: List[Dict[str, str]]) -> None:
+        self._mappings = values
+        self._variables = setlist()
+        for mapping in values:
+            self._variables.update(mapping.keys())
+    
+    def __str__(self) -> str:
+        res = f'VALUES ({" ".join(self._variables)})' + ' {'
+        res += " ".join([ f'({" ".join(v.values())})' for v in self._mappings ])
+        res += ' }'
+        return res
+    
+    @property
+    def variables(self):
+        return self._variables
+
+    @property
+    def mappings(self):
+        return self._mappings
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __hash__(self) -> int:
+        return hash(self.__str__())
+    
+    def __eq__(self, __o: object) -> bool:
+        return self.mappings == __o.mappings
 
 class ComparisonDummy():
     def __init__(self, s, p, o, cl, al) -> None:

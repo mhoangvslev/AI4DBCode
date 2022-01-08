@@ -62,7 +62,7 @@ class DBRunner:
         plTime = time.time()-startTime
         return plTime
 
-    def getLatency(self, sql, sqlwithplan, force_order=False):
+    def getLatency(self, sql, sqlwithplan, force_order=False, forceLatency=False):
         raise NotImplementedError()
     
     def getCost(self, sql, sqlwithplan: str, force_order=False):
@@ -92,15 +92,15 @@ class PGRunner(DBRunner):
         self._port = port
         self.config = PGConfig()
         
-    def getLatency(self, sql, sqlwithplan: str, force_order=False):
+    def getLatency(self, sql, sqlwithplan: str, force_order=False, forceLatency=False):
         """
         :param sql:a sqlSample object
         :return: the latency of sql
         """
-        if self.isCostTraining:
+        if self.isCostTraining and not forceLatency:
             return self.getCost(sql,sqlwithplan,force_order=force_order)
         global LatencyDict
-        if self.isLatencyRecord:
+        if self.isLatencyRecord and not forceLatency:
             if sqlwithplan in LatencyDict:
                 return LatencyDict[sqlwithplan]
         conn = psycopg2.connect(
@@ -256,6 +256,9 @@ class ISQLWrapper(object):
             query += ';'
         return self.execute_cmd("SPARQL " + query)
 
+class ISQLTimeoutException(Exception):
+    pass
+
 class ISQLRunner(DBRunner):
     def __init__(self, endpoint, graph, host="localhost", port="1111", isCostTraining = True,latencyRecord = True,latencyRecordFile = "RecordFile.json"):
         super().__init__(isCostTraining=isCostTraining, latencyRecord=latencyRecord, latencyRecordFile=latencyRecordFile)
@@ -291,17 +294,16 @@ class ISQLRunner(DBRunner):
         sparql.addDefaultGraph(self._graph)
         sparql.addParameter('timeout', f'{timeout}')
         sparql.setReturnFormat(JSON)
-        try:
-            response = sparql.query()
-            solutions = response.convert()
-            if 'x-exec-milliseconds' in response.info():
-                solutions['complete'] = False
-            else:
-                solutions['complete'] = True
-            return solutions
-        except Exception as error:
-            #logging.error(error)
-            logging.debug(error)
+        
+        start_time = time.time()
+        response = sparql.query()
+        elapsed_time = time.time() - start_time
+        solutions = response.convert()
+        if timeout > 0 and (elapsed_time * 1000) > timeout:
+            raise ISQLTimeoutException
+        if 'x-exec-milliseconds' in response.info():
+            raise ISQLTimeoutException
+        return solutions, elapsed_time
 
     def _explain(self, query: str, force_order: bool = False, mode=-7):
         """[summary]
@@ -327,30 +329,28 @@ class ISQLRunner(DBRunner):
         response = self._explain(query, force_order=force_order)
         return float(response.split('\n')[9])
 
-    def _query_latency(self, query, force_order=True):
-        start_time = time.time()
-        self._execute_query(query, force_order=force_order)
-        end_time = time.time()
-        afterCost = end_time - start_time
+    def _query_latency(self, query, timeout = 0, force_order=True):
+        _, afterCost = self._execute_query(query, timeout=timeout, force_order=force_order)
         return afterCost
 
-    def getLatency(self, sql, sqlwithplan, force_order=False):
+    def getLatency(self, sql, sqlwithplan, force_order=False, forceLatency=False):
         """
         :param sql:a sqlSample object
         :return: the latency of sql
         """
-        if self.isCostTraining:
+
+        if self.isCostTraining and not forceLatency:
             return self.getCost(sql,sqlwithplan, force_order=force_order)
         global LatencyDict
-        if self.isLatencyRecord:
+        if self.isLatencyRecord and not forceLatency:
             if sqlwithplan in LatencyDict:
                 return LatencyDict[sqlwithplan]
         
         thisQueryCost = self.getCost(sql,sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost()<100:
             try:
-                afterCost = self._query_latency(sqlwithplan, force_order=True)
-            except:
+                afterCost = self._query_latency(sqlwithplan, timeout=sql.timeout(), force_order=force_order)
+            except ISQLTimeoutException:
                 afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
         else:
             afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())

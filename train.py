@@ -171,7 +171,7 @@ class Train:
                 right = chosen_action[1]
                 env.takeAction(left,right)
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 if done:
                     # mrc = max(np.exp(reward*log(1.5))/pg_cost-1,0)
                     # rewardsP.append(np.exp(reward*log(1.5)-log(pg_cost)))
@@ -246,7 +246,7 @@ class Train:
                 # fn = os.path.basename(sqlt.filename).split('.')[0]
                 # decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
 
                 previous_state_list.append((value_now,next_value.view(-1,1),env_now))
@@ -337,7 +337,7 @@ class Train:
                 env.takeAction(left,right)
                 action_this_epi.append((left,right))
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward()
                 reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
 
                 previous_state_list.append((value_now,next_value.view(-1,1),env_now))

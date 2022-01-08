@@ -122,7 +122,7 @@ class ENV(object):
         logging.debug(f"Possible actions: {len(action_value_list)} out of {len(self.sel.join_candidate)} join candidates")
         return action_value_list
 
-    def reward(self):
+    def reward(self, forceLatency=False):
         """Calculate the reward for the learner. The network seeks to minimise the loss
         (1) rtos: 
             max(cost/baseline_cost - 1, 0)
@@ -143,23 +143,25 @@ class ENV(object):
         total = self.sel.total + 1
         logging.debug(f"Selected total: {total} out of {len(table_list)}")
 
-        if total == len(table_list):
-            #return log( self.sel.plan2Cost())/log(1.5), True
-            cost = self.sel.plan2Cost()
-            baseline_cost = self.sql.getDPlatency()
+        if total == len(table_list):           
+            prediction, cost = self.sel.plan2Cost(forceLatency=forceLatency)
+            baseline_cost = self.sql.getDPlatency(forceLatency=forceLatency)
+            reward = 0
 
             if self._rewarder == "rtos":
-                return cost, max(cost/baseline_cost - 1, 0), True
+                reward = max(cost/baseline_cost - 1, 0)
             elif self._rewarder == "cost-improvement":
-                return cost, min(max(np.log10(cost / baseline_cost), -10), 10), True
+                reward = min(max(np.log10(cost / baseline_cost), -10), 10)
             elif self._rewarder == "cost":
-                return cost, cost, True
+                reward = cost
             elif self._rewarder == "foop-cost":
-                return cost, 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10, True
+                reward = 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10
             else:
                 raise NotImplementedError(f"No handler for rewarder of type {self._rewarder}!")
+
+            return prediction, cost, reward, True
         else:
-            return None,0,False
+            return None, None, 0, False
 
 
 
@@ -260,7 +262,7 @@ class DQN:
             )
 
 
-    def validate(self, val_list: List[sqlInfo], tryTimes = 1, **infos) -> Union[float, float]:
+    def validate(self, val_list: List[sqlInfo], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:
         """[summary]
 
         MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.
@@ -283,8 +285,10 @@ class DQN:
         prt = []
         mes = 0
         result = None
+        prediction = None
+
         for sql in val_list:
-            pg_cost = sql.getDPlatency()
+            pg_cost = sql.getDPlatency(forceLatency=forceLatency)
             env = ENV(sql,self.db_info,self.pgrunner,self.device, self.config)
 
             for t in count():
@@ -294,7 +298,8 @@ class DQN:
                 right = chosen_action[1]
                 env.takeAction(left,right)
 
-                cost, reward, done = env.reward()
+                prediction, cost, reward, done = env.reward(forceLatency=forceLatency)
+                
                 if done:
                     rewards.append(reward)
                     mes += reward
@@ -318,7 +323,7 @@ class DQN:
         mrc, gmrl = np.average(rewards), gmean(rewards)     
 
         logging.debug(f"MRC: {mrc}n GMRL: {gmrl}")
-        return result
+        return prediction, result
 
     def optimize_model(self) -> Tuple[Number, float, float]:
         startTime = time.time()

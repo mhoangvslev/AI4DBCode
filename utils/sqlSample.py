@@ -5,7 +5,7 @@ from torch._C import device
 from torchfold.torchfold import Fold
 
 from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL
+from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL, ValuesISQL
 from utils.TreeLSTM import SPINN
 from utils.parser.parsed_query import ParsedQuery
 from utils.parser.parser import QueryParser
@@ -41,9 +41,9 @@ class sqlInfo:
         self.sql = sql
         self.filename = filename
 
-    def getDPlatency(self,):
+    def getDPlatency(self, forceLatency=False):
         if self.DPLantency == None:
-            self.DPLantency = self.runner.getLatency(self,self.sql)
+            self.DPLantency = self.runner.getLatency(self,self.sql, forceLatency=forceLatency)
         return self.DPLantency
     def getDPPlantime(self,):
         if self.plTime == None:
@@ -266,6 +266,9 @@ class JoinTree:
             self.aliasnames = setlist(self.aliasname2fromtable.keys())
             self.comparison_list = list()
             self.comparison_list.extend([ComparisonISQL(x) for x in parse_result.filters])
+            
+            self.values_list: SetList[ValuesISQL] = setlist([ ValuesISQL(x) for x in parse_result.values ])
+            
             logging.debug(f"There are {len(self.comparison_list)}/{len(parse_result.filters)} filter items: {self.comparison_list}")
 
             # Add equal comparison, albeit to a literal or a variable (join)
@@ -634,6 +637,15 @@ class JoinTree:
                 self.join_tree_repr.node(str(hash(left_son)), str(left_son))
                 self.join_tree_repr.node(str(hash(right_son)), str(right_son))
 
+            # Deal with values
+            values_list = setlist()
+            for m in self.values_list:
+                for var in m.variables:
+                    if isinstance(left_son, str) and var in left_son:
+                        values_list.append(str(m))
+            
+            res.update(values_list)
+
             leftRes = self.recTableISQL(left_son)
             if config["logging"]["use_graphviz"]:
                 self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
@@ -659,6 +671,15 @@ class JoinTree:
                             cpList.append(comparison.toString())
                         else:
                             on_list.append(comparison.toString())
+
+            # Deal with values
+            values_list = setlist()
+            for m in self.values_list:
+                for var in m.variables:
+                    if isinstance(right_son, str) and var in right_son:
+                        values_list.append(str(m))
+            
+            res.update(values_list)
             
             rightRes = self.recTableISQL(right_son)
             if config["logging"]["use_graphviz"]:
@@ -814,7 +835,7 @@ class JoinTree:
         else:
             res = "SELECT * WHERE { \n\t" 
             res += ' .\n\t'.join(self.recTableISQL(root))
-            res += "\n};"
+            res += "\n}"
 
         # Graphviz
         if config["logging"]["use_graphviz"]:
@@ -826,9 +847,9 @@ class JoinTree:
 
         return res
 
-    def plan2Cost(self):
+    def plan2Cost(self, forceLatency=False):
         self.proposedPlan = self.toSql()
-        return self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True)
+        return self.proposedPlan, self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
 
     @property
     def plan(self):
