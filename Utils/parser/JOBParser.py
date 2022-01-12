@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from typing import Dict, List, OrderedDict, Tuple, Union
+from collections_extended.setlists import SetList
 import numpy as np
 from rdflib.plugins.sparql.operators import Builtin_REGEX, Builtin_STR, ConditionalAndExpression, ConditionalOrExpression, RelationalExpression, UnaryMinus, UnaryNot, UnaryPlus
 from torch._C import BoolType, Value
@@ -142,7 +143,7 @@ class ExprISQL:
                 self.val = value_expr.value
                 return str(self.val)
             else:
-                return rf"'{str(value_expr)}'"
+                return repr(value_expr.value)
         elif isinstance(value_expr, (Variable, str)):
             return f'?{str(value_expr)}'
         elif value_expr._evalfn.__name__ == Builtin_REGEX.__name__:
@@ -153,7 +154,7 @@ class ExprISQL:
             raise NotImplementedError(f"Unknown expression of type {value_expr}")
 
     def __str__(self,):
-        if isinstance(self.expr, Literal) or isinstance(self.expr, Variable):
+        if isinstance(self.expr, (Variable, Literal)):
             return self.getValue(self.expr)
         elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__ :
             var, pattern = self.getValue(self.expr)
@@ -162,6 +163,21 @@ class ExprISQL:
             return f'str({self.getValue(self.expr)})'
         else:
             raise NotImplementedError(f"Unknown expression of type {self.expr}")
+
+    def get_variables(self) -> SetList:
+        res = setlist()
+        if isinstance(self.expr, Variable):
+            res.append(f'?{str(self.expr)}')
+        elif isinstance(self.expr, Literal):
+            pass
+        elif self.expr._evalfn.__name__ == Builtin_REGEX.__name__:
+            res.append(self.getValue(self.expr.get('text')))
+        elif self.expr._evalfn.__name__ == Builtin_STR.__name__:
+            res.append(self.getValue(self.expr.get('arg')))
+        else:
+            raise NotImplementedError(f"Unknown expression of type {self.expr}")
+
+        return res
 
 class JoinISQL:
     def __init__(self, join) -> None:
@@ -555,6 +571,21 @@ class ComparisonISQL:
         
         return res
 
+    def get_variables(self) -> SetList:
+        res = []
+        if len(self.comp_list) == 0:
+            if isinstance(self.comparison, Variable):
+                res.append(str(self.lexpr))
+            else:
+                if self.lexpr is not None:
+                    res.extend(self.lexpr.get_variables())
+                if self.rexpr is not None:
+                    res.extend(self.rexpr.get_variables())
+        else:
+            for comp in self.comp_list:
+                res.extend(comp.get_variables())
+        return setlist(res)
+
 class ComparisonSQL:
     def __init__(self, comparison):
         self.comparison = comparison
@@ -704,17 +735,17 @@ class DB:
             self.name2idx[table.name] = idx
             self.name2table[table.name] = table
 
-        if config["database"]["engine"] == "sql":
+        if config["database"]["engine_class"] == "sql":
             for idx, table_tree in enumerate(parse_tree):
                 table_name = table_tree["CreateStmt"]["relation"]["RangeVar"]["relname"]
                 add_table(TableSQL(table_tree["CreateStmt"]), idx)
 
-        elif config["database"]["engine"] == "sparql":
+        elif config["database"]["engine_class"] == "sparql":
             relations = open(os.path.join(config["database"]["JOBDir"], 'relations.txt'), 'r').read().splitlines()
             for idx, rel in enumerate(relations):
                 add_table(TableISQL(rel), idx)
         else:
-            raise ValueError(f"Unknown value {self.config['database']['engine']} for key database->engine")
+            raise ValueError(f'Unknown value {self.config["database"]["engine_class"]} for key database->engine')
 
         self.columns_total = 0
 

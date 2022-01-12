@@ -1,6 +1,7 @@
 cost-training:
   database:
-    engine: sparql
+    engine_class: sparql
+    engine_name: "virtuoso"
     syntheticDir: "Queries/sytheic"
     JOBDir: "JOB-queries/sparql"
 
@@ -13,17 +14,18 @@ cost-training:
     pg_port: "5432"
 
     # Virtuoso
-    isql_endpoint: "sparql"
-    isql_host: localhost
-
-    # isql_graph: "http://example.com/DAV/void"
-    # isql_port: 8890
+    virtuoso_endpoint: "sparql"
+    virtuoso_host: localhost
+    virtuoso_graph: "http://example.com/DAV/void"
+    virtuoso_port: 8890
     use_bushy_tree: false # Not available for sparql
     tree_num_in_net: 40
 
     # SaGe
-    isql_port: 8060
-    isql_graph: "http://localhost:8060/sparql"
+    sage_endpoint: "sparql"
+    sage_host: localhost
+    sage_port: 8080
+    sage_graph: "http://localhost:8080/sparql/jobrdf"
     sage_max_steps: 12000
     sage_convergence_threshold: 10
   

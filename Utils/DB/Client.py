@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional
 import json
 from tqdm import tqdm
 
+from Utils.DB.Query import Query
+
 class Client(ABC):
 
     def __init__(self, endpoint: str, graph: str):
@@ -25,7 +27,11 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    def query_explain(self, query: str, force_order: bool = False, mode=-7) -> float:
+    def query_explain(self, query: str, force_order: bool = False, mode=-7) -> str:
+        pass
+
+    @abstractmethod
+    def query_cardinality(self, query: str) -> float:
         pass
 
 
@@ -41,7 +47,6 @@ class ISQLWrapper(object):
 
     def execute_script(self, script: str):
         isql = shutil.which('isql')
-        #isql = None
         if isql is None: 
             result_url: str = requests.post(
                 'http://127.0.0.1:4000/commands/isql', 
@@ -87,13 +92,9 @@ class VirtuosoClient(Client):
 
     def __init__(self, endpoint: str, graph: str):
         super().__init__(endpoint, graph)
-        hostrgx = re.search(r'((\d+\.){3}\d+)|(localhost)', endpoint)
-        host = hostrgx.group(1)
+        host = next(filter(bool, re.search(r'((?:\d+\.){3}\d+)|(localhost)', endpoint).groups()))
         if host is None:
-            host = hostrgx.group(2)
-        else:
-            raise ValueError(f"Connot find hostname in {hostrgx}")
-
+            raise ValueError(f"Invalid host {endpoint}")
         self._isql = ISQLWrapper(f"{host}:1111", "dba", "dba")
 
     def __insert_force_order_pragma__(self, query: str) -> str:
@@ -135,7 +136,7 @@ class VirtuosoClient(Client):
             raise ISQLTimeoutException
         return solutions, elapsed_time
 
-    def query_explain(self, query: str, force_order: bool = False, mode=-7):
+    def query_explain(self, query: str, force_order: bool = False, mode=-7) -> str:
         """[summary]
 
         Args:
@@ -162,6 +163,11 @@ class VirtuosoClient(Client):
         _, afterCost = self._execute_query(query, timeout=timeout, force_order=force_order)
         return afterCost
 
+    def query_cardinality(self, query: str) -> float:
+        response = self.query_explain(query, mode=-1)
+        return float(re.findall(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response)[-1])
+        #return float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
+
 class SaGeClient(Client):
 
     def __init__(self, endpoint: str, graph: str):
@@ -181,6 +187,7 @@ class SaGeClient(Client):
             'next': next,
             'forceOrder': force_order
         }
+
         for _ in range(quanta):
             response = requests.post(
                 self._endpoint, headers=headers, data=json.dumps(payload)
@@ -190,29 +197,16 @@ class SaGeClient(Client):
             payload['next'] = response['next']
         return response
 
-    def query_explain(
-        self, query: str, next: str = None, force_order: bool = False
-    ) -> str:
+    def query_explain(self, query: str, force_order: bool = False, mode=-7) -> float:
         payload = {
             'query': query,
             'defaultGraph': self._graph,
-            'next': next,
             'forceOrder': force_order
         }
+
         host = f'{self._endpoint}/explain'
         response = requests.post(host, data=json.dumps(payload)).json()
         return response['query']
-
-    def cardinalities(self, query: str) -> List[Dict[str, Any]]:
-        payload = {
-            'query': query,
-            'defaultGraph': self._graph,
-            'next': None
-        }
-        response = requests.post(
-            self._endpoint, data=json.dumps(payload)
-        ).json()
-        return response['stats']['cardinalities']
 
     def query_cost(
         self, query: str, force_order: bool = False
@@ -261,3 +255,15 @@ class SaGeClient(Client):
         progressbar.close()
 
         return elapsed_time
+
+    def query_cardinality(self, query: str) -> float:
+        payload = {
+            'query': query,
+            'defaultGraph': self._graph,
+            'next': None,
+            'forceOrder': False
+        }
+
+        host = f'{self._endpoint}/explain'
+        response = requests.post(host, data=json.dumps(payload)).json()
+        return response['cardinality']

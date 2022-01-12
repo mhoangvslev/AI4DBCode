@@ -139,7 +139,7 @@ class ENV(object):
         Returns:
             [type]: [description]
         """
-        table_list = self.sel.all_table_list if self.config['database']['engine'] == "sparql" else self.sel.from_table_list
+        table_list = self.sel.all_table_list if self.config["database"]["engine_class"] == "sparql" else self.sel.from_table_list
         total = self.sel.total + 1
         logging.debug(f"Selected total: {total} out of {len(table_list)}")
 

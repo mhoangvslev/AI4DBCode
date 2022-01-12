@@ -39,8 +39,8 @@ services:
     ports:
       - '8080:8080'
     volumes:
-      - '${SAGE_GRAPH}:/root/sage-engine/graphs'
-      - '${SAGE_CONFIG}:/root/sage-engine/config'
+      - ${SAGE_GRAPH}:/root/sage-engine/graphs
+      - ${SAGE_CONFIG}:/root/sage-engine/config/sage.yaml
     entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "poetry run sage config/sage.yaml --workers=1 --port=8080"'
     #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "sh launch.sh sage"'
     

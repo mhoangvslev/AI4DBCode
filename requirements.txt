@@ -10,3 +10,4 @@ graphviz==0.18.2
 collections-extended==2.0.0
 pandas
 scipy
+requests

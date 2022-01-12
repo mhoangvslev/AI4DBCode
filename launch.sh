@@ -38,11 +38,11 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
 
     echo "Virtuoso is succesfully setup!"
 
-elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
-    VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d sparql;
+elif [ "$1" = "start" -a "$2" = "sage" ]; then
+    SAGE_CONFIG=$(realpath $SAGE_CONFIG) SAGE_GRAPH=$(realpath $SAGE_GRAPH) docker-compose up sage-engine | exit 1;
     attempt=0
 
-    until echo $(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql') | grep -o "http://example.com/DAV/void" ; 
+    until echo $(curl -H "Content-Type: application/json" -d '{"query": "SELECT * WHERE { ?s a ?c }", "defaultGraph": "http://localhost:8080/sparql/jobrdf"}' http://localhost:8080/sparql) | grep -o "cost" ; 
     do
         attempt=$(expr $attempt + 1)
         echo "Making attempt #$attempt...";
@@ -57,7 +57,7 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
         fi
     done
 
-    echo "Virtuoso is succesfully setup!"
+    echo "SaGe engine is succesfully setup!"
     
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \

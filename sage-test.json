@@ -1,0 +1,6 @@
+{
+    "query": "SELECT * WHERE { ?n <http://imdb.org/name__t#gender> ?n_gender. FILTER(str(?n_gender) = 'm' || FILTER(str(?n_gender) = 'f'). FILTER(regex(?n_name, '^B'))) } }", 
+    "defaultGraph": "http://localhost:8080/sparql/jobrdf", 
+    "next": null, 
+    "forceOrder": false
+}

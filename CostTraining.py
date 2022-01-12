@@ -106,20 +106,21 @@ class CostTraining:
 
         self.runner = (
             PGRunner(
-                config['database']['pg_dbname'],
-                config['database']['pg_user'],
-                config['database']['pg_password'],
-                config['database']['pg_host'],
-                config['database']['pg_port'],
+                config["database"]['pg_dbname'],
+                config["database"]['pg_user'],
+                config["database"]['pg_password'],
+                config["database"]['pg_host'],
+                config["database"]['pg_port'],
                 isCostTraining=True,
                 latencyRecord = False,
                 latencyRecordFile = "Cost.json"
-            ) if config['database']['engine'] == "sql" else
+            ) if config["database"]["engine_class"] == "sql" else
             ISQLRunner(
-                config['database']['isql_endpoint'],
-                config['database']['isql_graph'],
-                config['database']['isql_host'],
-                config['database']['isql_port'],
+                config["database"][f'{config["database"]["engine_name"]}_endpoint'],
+                config["database"][f'{config["database"]["engine_name"]}_graph'],
+                config["database"][f'{config["database"]["engine_name"]}_host'],
+                config["database"][f'{config["database"]["engine_name"]}_port'],
+                client=config["database"]["engine_name"],
                 isCostTraining=True,
                 latencyRecord = False,
                 latencyRecordFile = "Cost.json"
@@ -147,7 +148,7 @@ class CostTraining:
             L = []
             for root, dirs, files in os.walk(file_dir):
                 for file in files:
-                    if os.path.splitext(file)[1] == f'.{ self.config["database"]["engine"]}':
+                    if os.path.splitext(file)[1] == f'.{ self.config["database"]["engine_class"]}':
                         L.append(os.path.join(root, file))
             return L
         files = file_name(QueryDir)
@@ -427,9 +428,9 @@ if __name__=='__main__':
     ct = CostTraining(config=config)
 
     if args.mode == "train":
-        sytheticQueries = ct.QueryLoader(QueryDir=config['database']['syntheticDir'])
+        sytheticQueries = ct.QueryLoader(QueryDir=config["database"]['syntheticDir'])
         # logging.debug(sytheticQueries)
-        JOBQueries = ct.QueryLoader(QueryDir=config['database']['JOBDir'])
+        JOBQueries = ct.QueryLoader(QueryDir=config["database"]['JOBDir'])
         Q4,Q1 = ct.k_fold(JOBQueries,10,1)
         # logging.debug(Q4,Q1)
         ct.train(Q4+sytheticQueries,Q1, n_episodes=config['model']['n_episodes'])

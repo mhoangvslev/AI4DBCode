@@ -1,8 +1,17 @@
+import logging
+from typing import Union
+from collections_extended.setlists import setlist
 import psycopg2
 import json
 import re
+import yaml
+import os
+
 from math import log
 from Utils.DB.Client import Client, ISQLTimeoutException, SaGeClient, VirtuosoClient
+from Utils.parser.JOBParser import ComparisonISQL, DummyTableISQL, TableISQL, TableSQL
+
+config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
 class PGConfig:
     def __init__(self):
@@ -242,26 +251,27 @@ class ISQLRunner(DBRunner):
     def getCost(self, sql, sqlwithplan, force_order=False):
         return self.dbClient.query_cost(sqlwithplan, force_order=force_order)
     
-    def getSelectivity(self, table, whereCondition):
-        global selectivityDict
-        if whereCondition in selectivityDict:
-            return selectivityDict[whereCondition]
+    def getSelectivity(self, table: DummyTableISQL, whereCondition: ComparisonISQL):
+        tableString = str(table)
+        whereString = whereCondition.toString()
+        queryHash = hash(tableString +  whereString)
+        if queryHash in selectivityDict:
+            return selectivityDict[queryHash]
 
-        response = None
+        variables = [table.s, table.o]
+        filter_variables = whereCondition.get_variables()
 
-        try:
-            totalQuery = f'SELECT * WHERE {{ {table} }}'
-            response = self.dbClient.explain(totalQuery, mode=-1)
-            total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
-        except:
-            raise ValueError(f"Cannot execute query {totalQuery}. Response {response}")
+        for fv in filter_variables:
+            if fv not in variables: # if filter invalid, selectivity = 1
+                selectivityDict[queryHash] = 0 # -log(1) = 0
+                logging.debug(f"{whereString} lacks variable {fv} from {variables} {tableString}")
+                return selectivityDict[queryHash]
 
-        try:
-            resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
-            response = self.dbClient.explain(resQuery, mode=-1)
-            select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
-        except:
-            raise ValueError(f"Cannot execute query {resQuery}. Response: {response}")
+        totalQuery = f'SELECT * WHERE {{ {table} }}'
+        total_rows = self.dbClient.query_cardinality(totalQuery)
 
-        selectivityDict[whereCondition] = -log(select_rows/total_rows)
-        return selectivityDict[whereCondition]
+        resQuery = f'SELECT * WHERE {{ {table}. {whereString} }}'
+        select_rows = self.dbClient.query_cardinality(resQuery)
+
+        selectivityDict[queryHash] = -log(select_rows/total_rows)
+        return selectivityDict[queryHash]

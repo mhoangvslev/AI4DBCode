@@ -4,7 +4,7 @@ quota: 75
 stateless: True
 graphs:
 -
-  name: imdb
-  uri: http://localhost:8080/sparql/imdb
+  name: jobrdf
+  uri: http://localhost:8080/sparql/jobrdf
   backend: hdt-file
-  file: graphs/imdbfull.hdt
+  file: /root/sage-engine/graphs/imdbfull.hdt

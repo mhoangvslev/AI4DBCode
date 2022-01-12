@@ -105,17 +105,17 @@ class Train:
 
         self.runner = (
             PGRunner(
-                config['database']['pg_dbname'],
-                config['database']['pg_user'],
-                config['database']['pg_password'],
-                config['database']['pg_host'],
-                config['database']['pg_port'],
-            ) if config['database']['engine'] == "sql" else
+                config["database"]['pg_dbname'],
+                config["database"]['pg_user'],
+                config["database"]['pg_password'],
+                config["database"]['pg_host'],
+                config["database"]['pg_port'],
+            ) if config["database"]["engine_class"] == "sql" else
             ISQLRunner(
-                config['database']['isql_endpoint'],
-                config['database']['isql_graph'],
-                config['database']['isql_host'],
-                config['database']['isql_port'],
+                config["database"][f'{config["database"]["engine_name"]}_endpoint'],
+                config["database"][f'{config["database"]["engine_name"]}_graph'],
+                config["database"][f'{config["database"]["engine_name"]}_host'],
+                config["database"][f'{config["database"]["engine_name"]}_port'],
             )
         )
 
@@ -141,7 +141,7 @@ class Train:
             L = []
             for root, dirs, files in os.walk(file_dir):
                 for file in files:
-                    if os.path.splitext(file)[1] == f'.{self.config["database"]["engine"]}':
+                    if os.path.splitext(file)[1] == f'.{self.config["database"]["engine_class"]}':
                         L.append(os.path.join(root, file))
             return L
         files = file_name(QueryDir)
@@ -290,7 +290,7 @@ class Train:
                         mrc, gmrl = self.dqn.validate(validateSet)
                         training_time = time.time()-startTime
 
-                        fn = os.path.join(self.config['database']['JOBDir'], "validation.csv")
+                        fn = os.path.join(self.config["database"]['JOBDir'], "validation.csv")
                         pd.DataFrame(
                             [[i_episode+1, training_time, mrc, gmrl, pg_cost, pre_gd_time, gd_time]], 
                             columns=["episode", "training_time", "mrc", "gmrl", "pg_cost", "pre_gd_time, gd_time"]
@@ -401,9 +401,9 @@ if __name__=='__main__':
     lt = Train(config=config)
 
     if args.mode == "train":
-        sytheticQueries = lt.QueryLoader(QueryDir=config['database']['syntheticDir'])
+        sytheticQueries = lt.QueryLoader(QueryDir=config["database"]['syntheticDir'])
         # logging.debug(sytheticQueries)
-        JOBQueries = lt.QueryLoader(QueryDir=config['database']['JOBDir'])
+        JOBQueries = lt.QueryLoader(QueryDir=config["database"]['JOBDir'])
         Q4,Q1 = lt.k_fold(JOBQueries,10,1)
         # logging.debug(Q4,Q1)
         lt.train(Q4+sytheticQueries,Q1, n_episodes=config['model']['n_episodes'])
