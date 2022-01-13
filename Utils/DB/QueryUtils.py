@@ -5,11 +5,12 @@ from torch._C import device
 from torchfold.torchfold import Fold
 from Utils.DB.DBUtils import DBRunner, ISQLRunner, PGRunner
 from Utils.DB.Query import Query
+from Utils.Model.Rewarder import SaGeRefinedCostImprovementRewarder
 
-from Utils.parser.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TableISQL, TableSQL, TargetTableISQL, TargetTableSQL, ValuesISQL
-from Utils.TreeLSTM import SPINN
-from Utils.parser.parsed_query import ParsedQuery
-from Utils.parser.parser import QueryParser
+from Utils.Parser.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TableISQL, TableSQL, TargetTableISQL, TargetTableSQL, ValuesISQL
+from Utils.Model.TreeLSTM import SPINN
+from Utils.Parser.parsed_query import ParsedQuery
+from Utils.Parser.parser import QueryParser
 
 # from pyrdf2vec import RDF2VecTransformer
 # from pyrdf2vec.embedders import Word2Vec
@@ -29,8 +30,9 @@ from collections_extended import setlist
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 NB_FEATURE_SLOTS = 2 if config["database"]["engine_class"] == "sql" else 3
-
+refined_rewarder = SaGeRefinedCostImprovementRewarder()
 tree_lstm_memory = {}
+
 class JoinTree:
     """Where the magic happens
     """
@@ -603,30 +605,59 @@ class JoinTree:
                 self.join_tree_repr.node(str(hash(left_son)), str(left_son))
                 self.join_tree_repr.node(str(hash(right_son)), str(right_son))
 
-            # Deal with values
-            values_list = setlist()
+            l_filter_list = []
+            r_filter_list = []
+            if left_son in self.filter_list.keys():
+                for condition in self.filter_list[left_son]:
+                    l_filter_list.append(condition.toString())
+        
+            if right_son in self.filter_list.keys() :
+                for condition in self.filter_list[right_son]:
+                    r_filter_list.append(condition.toString())
+            
+            l_values_list = setlist()
+            r_value_list = setlist()
+            
             for m in self.values_list:
                 for var in m.variables:
                     if isinstance(left_son, str) and var in left_son:
-                        values_list.append(str(m))
-            
-            res.update(values_list)
+                        l_values_list.append(str(m))
+                    
+                    if isinstance(right_son, str) and var in right_son:
+                        r_value_list.append(str(m))
 
+            # =========================================
+
+            # Place left values            
+            res.update(l_values_list)
+
+            # Place left candidates
             leftRes = self.recTableISQL(left_son)
             if config["logging"]["use_graphviz"]:
                 self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
             res.update(leftRes)
-            
-            filter_list = []
-            on_list = []
-            if left_son in self.filter_list.keys():
-                for condition in self.filter_list[left_son]:
-                    filter_list.append(condition.toString())
-        
-            if right_son in self.filter_list.keys() :
-                for condition in self.filter_list[right_son]:
-                    filter_list.append(condition.toString())
 
+            # Place left filters
+            res.update(l_filter_list)
+
+            #===============================
+            
+            # Place right values
+            res.update(r_value_list)
+            
+            # Place right candidate
+            rightRes = self.recTableISQL(right_son)
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
+            res.update(rightRes)
+
+            # Place right filters
+            res.update(r_filter_list)
+
+            #=================================
+
+            # Equal comparisons are to be placed last
+            on_list = []
             cpList = []
             joined_aliasname = setlist([self.left_aliasname[node],self.right_aliasname[node]])
             for left_table in self.aliasnames_set[left_son]:
@@ -638,23 +669,7 @@ class JoinTree:
                         else:
                             on_list.append(comparison.toString())
 
-            # Deal with values
-            values_list = setlist()
-            for m in self.values_list:
-                for var in m.variables:
-                    if isinstance(right_son, str) and var in right_son:
-                        values_list.append(str(m))
-            
-            res.update(values_list)
-            
-            rightRes = self.recTableISQL(right_son)
-            if config["logging"]["use_graphviz"]:
-                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
-            res.update(rightRes)
-
-            # inner join
-            if len(filter_list + on_list + cpList) > 0:
-                res.update(cpList + on_list + filter_list)
+            res.update(on_list + cpList)
 
             return res
         else:
@@ -817,8 +832,19 @@ class JoinTree:
         return res
 
     def plan2Cost(self, forceLatency=False):
+
+        global refined_rewarder
+
         self.proposedPlan = self.toSql()
-        return self.proposedPlan, self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
+        
+        cost = None
+
+        if config["model"]["rewarder"] == "refined-cost-improvement" and self.runner.isCostTraining:
+            cost = refined_rewarder.get_cost(self.proposedPlan)
+        else:
+            cost = self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
+
+        return self.proposedPlan, cost
 
     @property
     def plan(self):

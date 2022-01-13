@@ -9,7 +9,7 @@ import os
 
 from math import log
 from Utils.DB.Client import Client, ISQLTimeoutException, SaGeClient, VirtuosoClient
-from Utils.parser.JOBParser import ComparisonISQL, DummyTableISQL, TableISQL, TableSQL
+from Utils.Parser.JOBParser import ComparisonISQL, DummyTableISQL, TableISQL, TableSQL
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
@@ -254,7 +254,7 @@ class ISQLRunner(DBRunner):
     def getSelectivity(self, table: DummyTableISQL, whereCondition: ComparisonISQL):
         tableString = str(table)
         whereString = whereCondition.toString()
-        queryHash = hash(tableString +  whereString)
+        queryHash = hash(tableString + whereString)
         if queryHash in selectivityDict:
             return selectivityDict[queryHash]
 

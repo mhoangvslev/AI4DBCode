@@ -8,7 +8,7 @@ from sage.query_engine.protobuf.iterators_pb2 import (
 )
 import yaml
 
-from Utils.parser.parsed_query import ParsedQuery
+from Utils.Parser.parsed_query import ParsedQuery
 
 from typing import List
 from sage.query_engine.iterators.loader import SavedProtobufPlan

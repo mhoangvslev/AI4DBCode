@@ -39,7 +39,7 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     echo "Virtuoso is succesfully setup!"
 
 elif [ "$1" = "start" -a "$2" = "sage" ]; then
-    SAGE_CONFIG=$(realpath $SAGE_CONFIG) SAGE_GRAPH=$(realpath $SAGE_GRAPH) docker-compose up sage-engine | exit 1;
+    SAGE_CONFIG=$(realpath $SAGE_CONFIG) SAGE_GRAPH=$(realpath $SAGE_GRAPH) docker-compose up -d sage-engine;
     attempt=0
 
     until echo $(curl -H "Content-Type: application/json" -d '{"query": "SELECT * WHERE { ?s a ?c }", "defaultGraph": "http://localhost:8080/sparql/jobrdf"}' http://localhost:8080/sparql) | grep -o "cost" ; 

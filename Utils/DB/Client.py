@@ -18,19 +18,15 @@ class Client(ABC):
         self._endpoint = endpoint
         self._graph = graph
 
-    @abstractmethod
     def query_cost(self, query: str, force_order: bool = False) -> float:
         pass
 
-    @abstractmethod
     def query_latency(self, query, timeout = 0, force_order=True) -> float:
         pass
 
-    @abstractmethod
     def query_explain(self, query: str, force_order: bool = False, mode=-7) -> str:
         pass
 
-    @abstractmethod
     def query_cardinality(self, query: str) -> float:
         pass
 

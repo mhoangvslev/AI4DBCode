@@ -17,8 +17,8 @@ from torchfold.torchfold import Fold
 
 from tqdm import tqdm
 from Utils.DB.DBUtils import DBRunner
-from Utils.parser.JOBParser import DB
-from Utils.TreeLSTM import SPINN
+from Utils.Parser.JOBParser import DB
+from Utils.Model.TreeLSTM import SPINN
 from Utils.DB.QueryUtils import JoinTree, Query
 import torch.optim as optim
 import numpy as np
@@ -156,6 +156,8 @@ class ENV(object):
                 reward = cost
             elif self._rewarder == "foop-cost":
                 reward = 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10
+            elif self._rewarder == "refined-cost-improvement":
+                reward = min(max(np.log10(cost / baseline_cost), -10), 10)
             else:
                 raise NotImplementedError(f"No handler for rewarder of type {self._rewarder}!")
 

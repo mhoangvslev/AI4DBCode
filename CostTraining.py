@@ -11,9 +11,9 @@ from itertools import count
 from math import log
 import random
 import time
-from DQN import DQN,ENV
-from Utils.TreeLSTM import SPINN
-from Utils.parser.JOBParser import DB
+from Utils.Model.DQN import DQN,ENV
+from Utils.Model.TreeLSTM import SPINN
+from Utils.Parser.JOBParser import DB
 import copy
 import torch
 from torch.nn import init
@@ -420,10 +420,10 @@ if __name__=='__main__':
             shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).communicate()
 
-        subprocess.Popen(
-            f"mkdir -p {os.path.join('models', config['model']['name'])}", 
-            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
+    subprocess.Popen(
+        f"mkdir -p {os.path.join('models', config['model']['name'])}", 
+        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    ).communicate()
 
     ct = CostTraining(config=config)
 
