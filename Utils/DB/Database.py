@@ -3,11 +3,10 @@ import os
 
 from typing import Dict, Any
 
-
 class Database():
 
     def __init__(self, config: Dict[str, Any]):
-        relations = config['environment']['database']['relations']
+        relations = config['environment']["database"]['relations']
         if os.path.exists(relations):
             with open(relations, 'r') as jsonfile:
                 self._relations = json.load(jsonfile)

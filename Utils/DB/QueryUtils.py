@@ -1,14 +1,16 @@
 import logging
-from typing import Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from collections_extended.setlists import SetList
 from torch._C import device
 from torchfold.torchfold import Fold
+from Utils.DB.DBUtils import DBRunner, ISQLRunner, PGRunner
+from Utils.DB.Query import Query
+from Utils.Model.Rewarder import SaGeRefinedCostImprovementRewarder
 
-from utils.DBUtils import DBRunner, ISQLRunner, PGRunner
-from utils.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TargetTableISQL, TargetTableSQL, ValuesISQL
-from utils.TreeLSTM import SPINN
-from utils.parser.parsed_query import ParsedQuery
-from utils.parser.parser import QueryParser
+from Utils.Parser.JOBParser import DB, ComparisonISQL, ComparisonISQLEqual, ComparisonSQL, DummyTableISQL, FromTableISQL, FromTableSQL, JoinISQL, TableISQL, TableSQL, TargetTableISQL, TargetTableSQL, ValuesISQL
+from Utils.Model.TreeLSTM import SPINN
+from Utils.Parser.parsed_query import ParsedQuery
+from Utils.Parser.parser import QueryParser
 
 # from pyrdf2vec import RDF2VecTransformer
 # from pyrdf2vec.embedders import Word2Vec
@@ -27,58 +29,24 @@ import graphviz as gv
 from collections_extended import setlist
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
-NB_FEATURE_SLOTS = 2 if config["database"]["engine"] == "sql" else 3
-
-class sqlInfo:
-    def __init__(self, runner: DBRunner, sql: str, filename: str):
-        self.DPLantency = None
-        self.DPCost = None
-        self.bestLatency = None
-        self.bestCost = None
-        self.bestOrder = None
-        self.plTime = None
-        self.runner = runner
-        self.sql = sql
-        self.filename = filename
-
-    def getDPlatency(self, forceLatency=False):
-        if self.DPLantency == None:
-            self.DPLantency = self.runner.getLatency(self,self.sql, forceLatency=forceLatency)
-        return self.DPLantency
-    def getDPPlantime(self,):
-        if self.plTime == None:
-            self.plTime = self.runner.getDPPlanTime(self,self.sql)
-        return self.plTime
-    def getDPCost(self,):
-        if self.DPCost == None:
-            self.DPCost = self.runner.getCost(self,self.sql)
-        return self.DPCost
-    def timeout(self,):
-        if self.DPLantency == None:
-            return 1000000
-        return self.getDPlatency()*4+self.getDPPlantime()
-    def getBestOrder(self,):
-        return self.bestOrder
-    def updateBestOrder(self,latency,order):
-        if self.bestOrder == None or self.bestLatency > latency:
-            self.bestLatency = latency
-            self.bestOrder = order
-
+NB_FEATURE_SLOTS = 2 if config["database"]["engine_class"] == "sql" else 3
+refined_rewarder = SaGeRefinedCostImprovementRewarder()
 tree_lstm_memory = {}
+
 class JoinTree:
     """Where the magic happens
     """
-    def __init__(self, sqlt: sqlInfo, db_info: DB, runner: DBRunner, device: device):
+    def __init__(self, sqlt: Query, db_info: DB, runner: DBRunner, device: device):
         global tree_lstm_memory
         self.nbFilters = 0
         tree_lstm_memory = {}
         self.sqlt = sqlt
         self.sql = self.sqlt.sql
 
-        self.aliasname2fullname = {}
+        self.aliasname2fullname: Dict[str, str] = {}
         self.runner = runner
         self.device = device
-        self.aliasname2fromtable={}
+        self.aliasname2fromtable: Dict[str, Union[DummyTableISQL, FromTableSQL]]={}
 
         if config["logging"]["use_graphviz"]:
             format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
@@ -328,7 +296,7 @@ class JoinTree:
                 left_aliasname = comparison.aliasname_list[0]
                 right_aliasname = comparison.aliasname_list[1]
 
-                if config["database"]["engine"] == "sparql":
+                if config["database"]["engine_class"] == "sparql":
                     tmp = list(filter(lambda x: left_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -344,7 +312,7 @@ class JoinTree:
                         )
                     left_aliasname = tmp[0]
 
-                if config["database"]["engine"] == "sparql":
+                if config["database"]["engine_class"] == "sparql":
                     tmp = list(filter(lambda x: right_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -373,7 +341,7 @@ class JoinTree:
                 left_table_class = db_info.name2table[left_fullname]
 
                 left_column = comparison.column_list[0]
-                # if config["database"]["engine"] == "sparql":
+                # if config["database"]["engine_class"] == "sparql":
                 #     tmp = list(filter(lambda x: left_column in x, left_table_class.column2idx.keys()))
                 #     if len(tmp) > 1: 
                 #         raise ValueError(
@@ -393,7 +361,7 @@ class JoinTree:
 
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
 
-                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
+                if config["database"]["engine_class"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
                 self.join_list[right_aliasname].append((left_aliasname,comparison))
@@ -404,7 +372,7 @@ class JoinTree:
 
                 right_column = comparison.column_list[1]
                 
-                # if config["database"]["engine"] == "sparql":
+                # if config["database"]["engine_class"] == "sparql":
                 #     tmp = list(filter(lambda x: right_column in x, right_table_class.column2idx.keys()))
                 #     if len(tmp) > 1: 
                 #         raise ValueError(
@@ -423,7 +391,7 @@ class JoinTree:
                 table_idx = right_table_class.column2idx[right_column]
                 self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS] = 1
                 
-                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
+                if config["database"]["engine_class"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[right_aliasname][table_idx * NB_FEATURE_SLOTS + 2] = 1
 
 
@@ -439,7 +407,7 @@ class JoinTree:
             else: 
                 left_aliasname = comparison.aliasname_list[0]
                     
-                if config["database"]["engine"] == "sparql":
+                if config["database"]["engine_class"] == "sparql":
                     tmp = list(filter(lambda x: left_aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -462,7 +430,7 @@ class JoinTree:
                 left_table_class = db_info.name2table[left_fullname]
 
                 left_column = comparison.column_list[0]
-                if config["database"]["engine"] == "sparql":
+                if config["database"]["engine_class"] == "sparql":
                     tmp = list(filter(lambda x: left_column == x, left_table_class.column2idx.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -480,12 +448,12 @@ class JoinTree:
 
                 table_idx = left_table_class.column2idx[left_column]
                 selectivity = self.runner.getSelectivity(
-                    str(self.aliasname2fromtable[left_aliasname]), 
-                    comparison.toString()
+                    self.aliasname2fromtable[left_aliasname], 
+                    comparison
                 )
                 self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 1] += selectivity
 
-                if config["database"]["engine"] == "sparql" and config["database"]["isql_featurization_v2"]:
+                if config["database"]["engine_class"] == "sparql" and config["database"]["isql_featurization_v2"]:
                     self.table_fea_set[left_aliasname][table_idx * NB_FEATURE_SLOTS + 2] += selectivity
 
         for aliasname in self.aliasnames_root_set:
@@ -504,7 +472,7 @@ class JoinTree:
             for comparison in self.filter_list[filter_table]:
                 aliasname = comparison.aliasname_list[0]
 
-                if config["database"]["engine"] == "sparql":
+                if config["database"]["engine_class"] == "sparql":
                     tmp = list(filter(lambda x: aliasname in x, self.aliasname2fullname.keys()))
                     if len(tmp) > 1: 
                         raise ValueError(
@@ -524,7 +492,7 @@ class JoinTree:
                 table = self.db_info.name2table[fullname]
                 for column in comparison.column_list:
 
-                    # if config["database"]["engine"] == "sparql":
+                    # if config["database"]["engine_class"] == "sparql":
                     #     tmp = list(filter(lambda x: column in x, table.column2idx.keys()))
                     #     if len(tmp) > 1: 
                     #         raise ValueError(
@@ -560,7 +528,7 @@ class JoinTree:
         self.left_son = {}
         self.right_son = {}
 
-        if config["database"]["engine"] == "sql":
+        if config["database"]["engine_class"] == "sql":
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.from_table_list])
         else:
             self.aliasnames_root_set = setlist([x.getAliasName() for x in self.all_table_list])
@@ -637,30 +605,59 @@ class JoinTree:
                 self.join_tree_repr.node(str(hash(left_son)), str(left_son))
                 self.join_tree_repr.node(str(hash(right_son)), str(right_son))
 
-            # Deal with values
-            values_list = setlist()
+            l_filter_list = []
+            r_filter_list = []
+            if left_son in self.filter_list.keys():
+                for condition in self.filter_list[left_son]:
+                    l_filter_list.append(condition.toString())
+        
+            if right_son in self.filter_list.keys() :
+                for condition in self.filter_list[right_son]:
+                    r_filter_list.append(condition.toString())
+            
+            l_values_list = setlist()
+            r_value_list = setlist()
+            
             for m in self.values_list:
                 for var in m.variables:
                     if isinstance(left_son, str) and var in left_son:
-                        values_list.append(str(m))
-            
-            res.update(values_list)
+                        l_values_list.append(str(m))
+                    
+                    if isinstance(right_son, str) and var in right_son:
+                        r_value_list.append(str(m))
 
+            # =========================================
+
+            # Place left values            
+            res.update(l_values_list)
+
+            # Place left candidates
             leftRes = self.recTableISQL(left_son)
             if config["logging"]["use_graphviz"]:
                 self.join_tree_repr.edge(str(hash(node)), str(hash(left_son)))
             res.update(leftRes)
-            
-            filter_list = []
-            on_list = []
-            if left_son in self.filter_list.keys():
-                for condition in self.filter_list[left_son]:
-                    filter_list.append(condition.toString())
-        
-            if right_son in self.filter_list.keys() :
-                for condition in self.filter_list[right_son]:
-                    filter_list.append(condition.toString())
 
+            # Place left filters
+            res.update(l_filter_list)
+
+            #===============================
+            
+            # Place right values
+            res.update(r_value_list)
+            
+            # Place right candidate
+            rightRes = self.recTableISQL(right_son)
+            if config["logging"]["use_graphviz"]:
+                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
+            res.update(rightRes)
+
+            # Place right filters
+            res.update(r_filter_list)
+
+            #=================================
+
+            # Equal comparisons are to be placed last
+            on_list = []
             cpList = []
             joined_aliasname = setlist([self.left_aliasname[node],self.right_aliasname[node]])
             for left_table in self.aliasnames_set[left_son]:
@@ -672,23 +669,7 @@ class JoinTree:
                         else:
                             on_list.append(comparison.toString())
 
-            # Deal with values
-            values_list = setlist()
-            for m in self.values_list:
-                for var in m.variables:
-                    if isinstance(right_son, str) and var in right_son:
-                        values_list.append(str(m))
-            
-            res.update(values_list)
-            
-            rightRes = self.recTableISQL(right_son)
-            if config["logging"]["use_graphviz"]:
-                self.join_tree_repr.edge(str(hash(node)), str(hash(right_son)))
-            res.update(rightRes)
-
-            # inner join
-            if len(filter_list + on_list + cpList) > 0:
-                res.update(cpList + on_list + filter_list)
+            res.update(on_list + cpList)
 
             return res
         else:
@@ -828,13 +809,16 @@ class JoinTree:
         root = self.total - 1
         logging.debug(f"Root: {root}")
 
-        if config["database"]["engine"] == "sql":
+        if config["database"]["engine_class"] == "sql":
             res = "select "+",\n".join([str(x) for x in self.target_table_list])+"\n"
             res += "from " + self.recTableSQL(root)[1:-1]
             res += ";"
         else:
             res = "SELECT * WHERE { \n\t" 
-            res += ' .\n\t'.join(self.recTableISQL(root))
+            for pattern in self.recTableISQL(root):
+                if not pattern.endswith("."):
+                    res += f"{pattern} ."
+                res += "\n\t"
             res += "\n}"
 
         # Graphviz
@@ -848,8 +832,19 @@ class JoinTree:
         return res
 
     def plan2Cost(self, forceLatency=False):
+
+        global refined_rewarder
+
         self.proposedPlan = self.toSql()
-        return self.proposedPlan, self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
+        
+        cost = None
+
+        if config["model"]["rewarder"] == "refined-cost-improvement" and self.runner.isCostTraining:
+            cost = refined_rewarder.get_cost(self.proposedPlan)
+        else:
+            cost = self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
+
+        return self.proposedPlan, cost
 
     @property
     def plan(self):

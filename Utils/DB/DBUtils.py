@@ -1,17 +1,17 @@
-import os
+import logging
+from typing import Union
+from collections_extended.setlists import setlist
 import psycopg2
 import json
-import tempfile
-import subprocess
 import re
-import logging
-import time
+import yaml
 import os
-import shutil
-import requests
 
 from math import log
-from SPARQLWrapper import SPARQLWrapper, JSON
+from Utils.DB.Client import Client, ISQLTimeoutException, SaGeClient, VirtuosoClient
+from Utils.Parser.JOBParser import ComparisonISQL, DummyTableISQL, TableISQL, TableSQL
+
+config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
 class PGConfig:
     def __init__(self):
@@ -205,133 +205,19 @@ class PGRunner(DBRunner):
         #     logging.debug(stored_selectivity_fake[whereCondition],select_rows,total_rows)
         return selectivityDict[whereCondition]
 
-class ISQLWrapperException(Exception):
-    pass
-
-class ISQLWrapper(object):
-
-    def __init__(self, hostname: str, username: str, password: str):
-        self.hostname = hostname
-        self.username = username
-        self.password = password
-
-    def execute_script(self, script: str):
-        isql = shutil.which('isql')
-        #isql = None
-        if isql is None: 
-            result_url: str = requests.post(
-                'http://127.0.0.1:4000/commands/isql', 
-                json={"args": [self.hostname, self.username, self.password, script]}
-            ).json()['result_url']
-
-            result = requests.get(result_url.replace('wait=false', 'wait=true')).json()
-            if result.get('report') is None:
-                raise NotImplementedError(f'Testing for ISQL: {result.get("error")}')
-            else:
-                return result.get("report")
-            
-        else:  
-            cmd = (isql + f' {self.hostname} {self.username} {self.password} {script}').split(' ')
-            
-            process = subprocess.run(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            if process.stderr:
-                raise ISQLWrapperException(process.stderr)
-            return process.stdout.decode('utf-8')
-
-    def execute_cmd(self, cmd: str):
-        if not cmd.endswith(';'):
-            cmd += ';'
-                
-        tf_query = tempfile.NamedTemporaryFile()
-        tf_query.write(cmd.encode('utf-8'))
-        tf_query.flush()
-        result = self.execute_script(tf_query.name)
-        tf_query.close()
-        return result
-
-    def sparql_query(self, query: str):
-        if not query.endswith(';'):
-            query += ';'
-        return self.execute_cmd("SPARQL " + query)
-
-class ISQLTimeoutException(Exception):
-    pass
-
 class ISQLRunner(DBRunner):
-    def __init__(self, endpoint, graph, host="localhost", port="1111", isCostTraining = True,latencyRecord = True,latencyRecordFile = "RecordFile.json"):
+    def __init__(self, endpoint, graph, host="localhost", port="1111", client="virtuoso", isCostTraining = True,latencyRecord = True,latencyRecordFile = "RecordFile.json"):
         super().__init__(isCostTraining=isCostTraining, latencyRecord=latencyRecord, latencyRecordFile=latencyRecordFile)
-        self._endpoint = f"http://{host}:{port}/{endpoint}"
-        self._graph = graph
-        self._isql = ISQLWrapper(f"{host}:1111", "dba", "dba")
-
-    def __insert_force_order_pragma__(self, query: str) -> str:
-        return f'DEFINE sql:select-option "order" {query}'
-
-    def __insert_from_named_graph_clause__(
-        self, query: str, graph: str
-    ) -> str:
-        select_clause, where_clause = query.split('WHERE')
-        return f'{select_clause} FROM <{graph}> WHERE {where_clause}'
-
-    def __remove_comments__(self, query: str) -> str:
-        return re.sub('\n[\t ]*#.*', '', query)
-
-    def __format_regex__(self, query: str) -> str:
-        query = re.sub('\'', '"', query)
-        return re.sub(r'\\\\', r'\\', query)
-
-    def _execute_query(
-        self, query: str, timeout: int = 0, force_order: bool = False
-    ) -> dict:
-        if force_order:
-            query = self.__insert_force_order_pragma__(query)
-        # query = self.__remove_comments__(query)
-        # query = self.__format_regex__(query)
-        sparql = SPARQLWrapper(self._endpoint)
-        sparql.setQuery(query)
-        sparql.addDefaultGraph(self._graph)
-        sparql.addParameter('timeout', f'{timeout}')
-        sparql.setReturnFormat(JSON)
         
-        start_time = time.time()
-        response = sparql.query()
-        elapsed_time = time.time() - start_time
-        solutions = response.convert()
-        if timeout > 0 and (elapsed_time * 1000) > timeout:
-            raise ISQLTimeoutException
-        if 'x-exec-milliseconds' in response.info():
-            raise ISQLTimeoutException
-        return solutions, elapsed_time
+        if client not in ["virtuoso", "sage"]:
+            raise ValueError("Configuration error: client must be either of ['virtuoso'; 'sage']!")
 
-    def _explain(self, query: str, force_order: bool = False, mode=-7):
-        """[summary]
-
-        Args:
-            query (str): [description]
-            force_order (bool, optional): [description]. Defaults to False.
-            mode (int, optional): http://docs.openlinksw.com/virtuoso/fn_explain/. Defaults to -7.
-
-        Returns:
-            [type]: [description]
-        """
-        if force_order:
-            query = self.__insert_force_order_pragma__(query)
-        query = self.__insert_from_named_graph_clause__(query, self._graph)
-        query = self.__remove_comments__(query)
-        query = self.__format_regex__(query)
-        cmd = f"select explain('sparql {query}', {mode});"
-        return self._isql.execute_cmd(cmd)
-
-    
-    def _query_cost(self, query: str, force_order: bool = False) -> float:
-        response = self._explain(query, force_order=force_order)
-        return float(response.split('\n')[9])
-
-    def _query_latency(self, query, timeout = 0, force_order=True):
-        _, afterCost = self._execute_query(query, timeout=timeout, force_order=force_order)
-        return afterCost
+        self.dbClient: Client = (
+            VirtuosoClient(endpoint=f"http://{host}:{port}/{endpoint}", graph=graph)
+            if client == "virtuoso" else
+            SaGeClient(endpoint=f"http://{host}:{port}/{endpoint}", graph=graph)
+        )
+        
 
     def getLatency(self, sql, sqlwithplan, force_order=False, forceLatency=False):
         """
@@ -349,7 +235,7 @@ class ISQLRunner(DBRunner):
         thisQueryCost = self.getCost(sql,sqlwithplan, force_order=True)
         if thisQueryCost / sql.getDPCost()<100:
             try:
-                afterCost = self._query_latency(sqlwithplan, timeout=sql.timeout(), force_order=force_order)
+                afterCost = self.dbClient.query_latency(sqlwithplan, timeout=sql.timeout(), force_order=force_order)
             except ISQLTimeoutException:
                 afterCost = max(thisQueryCost / sql.getDPCost()*sql.getDPlatency(),sql.timeout())
         else:
@@ -363,28 +249,29 @@ class ISQLRunner(DBRunner):
         return afterCost
 
     def getCost(self, sql, sqlwithplan, force_order=False):
-        return self._query_cost(sqlwithplan, force_order=force_order)
+        return self.dbClient.query_cost(sqlwithplan, force_order=force_order)
     
-    def getSelectivity(self, table, whereCondition):
-        global selectivityDict
-        if whereCondition in selectivityDict:
-            return selectivityDict[whereCondition]
+    def getSelectivity(self, table: DummyTableISQL, whereCondition: ComparisonISQL):
+        tableString = str(table)
+        whereString = whereCondition.toString()
+        queryHash = hash(tableString + whereString)
+        if queryHash in selectivityDict:
+            return selectivityDict[queryHash]
 
-        response = None
+        variables = [table.s, table.o]
+        filter_variables = whereCondition.get_variables()
 
-        try:
-            totalQuery = f'SELECT * WHERE {{ {table} }}'
-            response = self._explain(totalQuery, mode=-1)
-            total_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
-        except:
-            raise ValueError(f"Cannot execute query {totalQuery}. Response {response}")
+        for fv in filter_variables:
+            if fv not in variables: # if filter invalid, selectivity = 1
+                selectivityDict[queryHash] = 0 # -log(1) = 0
+                logging.debug(f"{whereString} lacks variable {fv} from {variables} {tableString}")
+                return selectivityDict[queryHash]
 
-        try:
-            resQuery = f'SELECT * WHERE {{ {table} {whereCondition} }}'
-            response = self._explain(resQuery, mode=-1)
-            select_rows = float(re.search(r'RDF_QUAD\w*\s+([0-9e\+\.]+)\srows', response).group(1))
-        except:
-            raise ValueError(f"Cannot execute query {resQuery}. Response: {response}")
+        totalQuery = f'SELECT * WHERE {{ {table} }}'
+        total_rows = self.dbClient.query_cardinality(totalQuery)
 
-        selectivityDict[whereCondition] = -log(select_rows/total_rows)
-        return selectivityDict[whereCondition]
+        resQuery = f'SELECT * WHERE {{ {table}. {whereString} }}'
+        select_rows = self.dbClient.query_cardinality(resQuery)
+
+        selectivityDict[queryHash] = -log(select_rows/total_rows)
+        return selectivityDict[queryHash]

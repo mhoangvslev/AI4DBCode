@@ -8,7 +8,7 @@ import os
 import yaml
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
-NB_FEATURE_SLOTS = 2 if config["database"]["engine"] == "sql" else 3
+NB_FEATURE_SLOTS = 2 if config["database"]["engine_class"] == "sql" else 3
 
 class TreeLSTM(nn.Module):
     def __init__(self, num_units):

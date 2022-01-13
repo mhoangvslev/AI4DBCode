@@ -37,6 +37,27 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     done
 
     echo "Virtuoso is succesfully setup!"
+
+elif [ "$1" = "start" -a "$2" = "sage" ]; then
+    SAGE_CONFIG=$(realpath $SAGE_CONFIG) SAGE_GRAPH=$(realpath $SAGE_GRAPH) docker-compose up -d sage-engine;
+    attempt=0
+
+    until echo $(curl -H "Content-Type: application/json" -d '{"query": "SELECT * WHERE { ?s a ?c }", "defaultGraph": "http://localhost:8080/sparql/jobrdf"}' http://localhost:8080/sparql) | grep -o "cost" ; 
+    do
+        attempt=$(expr $attempt + 1)
+        echo "Making attempt #$attempt...";
+        sleep 1;
+
+        if [ "$attempt" = "$3" ]; then
+            echo "Virtuoso did not launched successfully. It could be:
+                (1) You must specify where to look for virtuoso database folder in VIRTUOSO_DB
+                (2) Check error message
+            "
+            exit 1
+        fi
+    done
+
+    echo "SaGe engine is succesfully setup!"
     
 elif [ "$1" = "start" -a "$2" = "rtos-cpu" ]; then
     docker run -it --rm \

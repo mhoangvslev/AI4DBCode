@@ -5,16 +5,16 @@ import subprocess
 from typing import AnyStr, List, Tuple
 
 import yaml
-from utils.DBUtils import PGRunner, ISQLRunner
-from utils.sqlSample import sqlInfo
+from Utils.DB.DBUtils import PGRunner, ISQLRunner
+from Utils.DB.QueryUtils import Query
 import numpy as np
 from itertools import count
 from math import log
 import random
 import time
-from DQN import DQN,ENV
-from utils.TreeLSTM import SPINN
-from utils.JOBParser import DB
+from Utils.Model.DQN import DQN,ENV
+from Utils.Model.TreeLSTM import SPINN
+from Utils.Parser.JOBParser import DB
 import copy
 import torch
 from torch.nn import init
@@ -98,20 +98,20 @@ class LatencyTuning:
 
         self.runner = (
             PGRunner(
-                config['database']['pg_dbname'],
-                config['database']['pg_user'],
-                config['database']['pg_password'],
-                config['database']['pg_host'],
-                config['database']['pg_port'],
+                config["database"]['pg_dbname'],
+                config["database"]['pg_user'],
+                config["database"]['pg_password'],
+                config["database"]['pg_host'],
+                config["database"]['pg_port'],
                 isCostTraining=False,
                 latencyRecord = True,
                 latencyRecordFile = "Cost.json"
-            ) if config['database']['engine'] == "sql" else
+            ) if config["database"]["engine_class"] == "sql" else
             ISQLRunner(
-                config['database']['isql_endpoint'],
-                config['database']['isql_graph'],
-                config['database']['isql_host'],
-                config['database']['isql_port'],
+                config["database"][f'{config["database"]["engine_name"]}_endpoint'],
+                config["database"][f'{config["database"]["engine_name"]}_graph'],
+                config["database"][f'{config["database"]["engine_name"]}_host'],
+                config["database"][f'{config["database"]["engine_name"]}_port'],
                 isCostTraining=False,
                 latencyRecord = True,
                 latencyRecordFile = "Cost.json"
@@ -120,7 +120,7 @@ class LatencyTuning:
 
         self.dqn = DQN(self.policy_net,self.target_net,self.db_info,self.runner, self.device, config=config)
 
-    def k_fold(self, input_list: List[sqlInfo],k,ix = 0) -> Tuple[List[sqlInfo], List[sqlInfo]]:
+    def k_fold(self, input_list: List[Query],k,ix = 0) -> Tuple[List[Query], List[Query]]:
         li = len(input_list)
         kl = (li-1)//k + 1
         train = []
@@ -134,13 +134,13 @@ class LatencyTuning:
         return train, validate
 
 
-    def QueryLoader(self, QueryDir: str) -> List[sqlInfo]:
+    def QueryLoader(self, QueryDir: str) -> List[Query]:
         def file_name(file_dir):
             import os
             L = []
             for root, dirs, files in os.walk(file_dir):
                 for file in files:
-                    if os.path.splitext(file)[1] == f'.{self.config["database"]["engine"]}':
+                    if os.path.splitext(file)[1] == f'.{self.config["database"]["engine_class"]}':
                         L.append(os.path.join(root, file))
             return L
         files = file_name(QueryDir)
@@ -149,10 +149,10 @@ class LatencyTuning:
             with open(filename, "r") as f:
                 data = f.readlines()
                 one_sql = "".join(data)
-                sql_list.append(sqlInfo(self.runner,one_sql,filename))
+                sql_list.append(Query(self.runner,one_sql,filename))
         return sql_list
 
-    def resample_sql(self, sql_list: List[sqlInfo]):
+    def resample_sql(self, sql_list: List[Query]):
         rewards = []
         reward_sum = 0
         rewardsP = []
@@ -188,7 +188,7 @@ class LatencyTuning:
                     break
         return res_sql+sql_list
 
-    def train(self, trainSet: List[sqlInfo], validateSet: List[sqlInfo], n_episodes=10000):
+    def train(self, trainSet: List[Query], validateSet: List[Query], n_episodes=10000):
 
         trainSet_temp = trainSet
         losses = []
@@ -320,7 +320,7 @@ class LatencyTuning:
 
         for queryfile in queryfiles:
             logging.debug(f"Processing {queryfile}...")
-            sqlt = sqlInfo(self.runner, open(queryfile, "r").read(), queryfile)
+            sqlt = Query(self.runner, open(queryfile, "r").read(), queryfile)
             
             sql_out = os.path.join("models", self.config["model"]["name"], "prediction", os.path.basename(sqlt.filename))
             os.makedirs(os.path.dirname(sql_out), exist_ok=True)
@@ -440,9 +440,9 @@ if __name__=='__main__':
     lt = LatencyTuning(config=config)
 
     if args.mode == "train":
-        sytheticQueries = lt.QueryLoader(QueryDir=config['database']['syntheticDir'])
+        sytheticQueries = lt.QueryLoader(QueryDir=config["database"]['syntheticDir'])
         # logging.debug(sytheticQueries)
-        JOBQueries = lt.QueryLoader(QueryDir=config['database']['JOBDir'])
+        JOBQueries = lt.QueryLoader(QueryDir=config["database"]['JOBDir'])
         Q4,Q1 = lt.k_fold(JOBQueries,10,1)
         # logging.debug(Q4,Q1)
         lt.train(Q4+sytheticQueries,Q1, n_episodes=config['model']['n_episodes'])
@@ -460,9 +460,9 @@ if __name__=='__main__':
                 shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
 
-            subprocess.Popen(
-                f"rm -f {os.path.join('models', config['model']['name'], 'summary.predict.csv')}", 
-                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+        subprocess.Popen(
+            f"rm -f {os.path.join('models', config['model']['name'], 'summary.predict.csv')}", 
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ).communicate()
 
         lt.predict(queryfiles, forceLatency=args.force_latency)

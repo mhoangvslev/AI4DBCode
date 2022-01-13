@@ -14,7 +14,7 @@ from sage.query_engine.optimizer.physical.visitors.filter_push_down import (
     FilterVariablesExtractor
 )
 
-from utils.parser.parsed_query import ParsedQuery
+from Utils.Parser.parsed_query import ParsedQuery
 
 
 class QueryParser(LogicalPlanVisitor):

@@ -16,10 +16,10 @@ from collections import namedtuple
 from torchfold.torchfold import Fold
 
 from tqdm import tqdm
-from utils.DBUtils import DBRunner
-from utils.JOBParser import DB
-from utils.TreeLSTM import SPINN
-from utils.sqlSample import JoinTree, sqlInfo
+from Utils.DB.DBUtils import DBRunner
+from Utils.Parser.JOBParser import DB
+from Utils.Model.TreeLSTM import SPINN
+from Utils.DB.QueryUtils import JoinTree, Query
 import torch.optim as optim
 import numpy as np
 from math import log
@@ -30,7 +30,7 @@ from scipy.stats import gmean
 FOOP_CONST=10e13
 
 class ENV(object):
-    def __init__(self, sql: sqlInfo, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
+    def __init__(self, sql: Query, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
         self.config = config
         self.sel = JoinTree(sql,db_info,pgrunner,device)
         self.sql = sql
@@ -139,7 +139,7 @@ class ENV(object):
         Returns:
             [type]: [description]
         """
-        table_list = self.sel.all_table_list if self.config['database']['engine'] == "sparql" else self.sel.from_table_list
+        table_list = self.sel.all_table_list if self.config["database"]["engine_class"] == "sparql" else self.sel.from_table_list
         total = self.sel.total + 1
         logging.debug(f"Selected total: {total} out of {len(table_list)}")
 
@@ -156,6 +156,8 @@ class ENV(object):
                 reward = cost
             elif self._rewarder == "foop-cost":
                 reward = 10 * np.sqrt(cost/FOOP_CONST) if cost < FOOP_CONST else 10
+            elif self._rewarder == "refined-cost-improvement":
+                reward = min(max(np.log10(cost / baseline_cost), -10), 10)
             else:
                 raise NotImplementedError(f"No handler for rewarder of type {self._rewarder}!")
 
@@ -262,7 +264,7 @@ class DQN:
             )
 
 
-    def validate(self, val_list: List[sqlInfo], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:
+    def validate(self, val_list: List[Query], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:
         """[summary]
 
         MRC: Mean Relevant Cost. MRC=1 means the model's cost is same as PG.
