@@ -253,6 +253,20 @@ class LatencyTuning:
                 final_state_value = (next_value ) + reward.detach()
 
                 if done:
+
+                    data = {
+                        "episode": i_episode,
+                        "query": sqlt.filename,
+                        "step": t,
+                        "reward": reward.item(),
+                        "cost": cost,
+                        "base-cost": sqlt.getDPlatency()
+                    }
+
+                    training_summary = pd.DataFrame(data, index=[0])                
+                    fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
+                    training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+
                     cnt = 0
                     #             for idx in range(t-cnt+1):
                     global tree_lstm_memory
@@ -297,9 +311,9 @@ class LatencyTuning:
                            "loss": loss
                         }
 
-                        _, summary = self.dqn.validate(validateSet, infos=infos)
-                        fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
-                        summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                        _, validation_summary = self.dqn.validate(validateSet, infos=infos)
+                        fn = os.path.join("models", self.config["model"]["name"], "summary-validation.csv")
+                        validation_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
 
                         logging.debug(f"time: {training_time}")
                         logging.debug("~~~~~~~~~~~~~~")

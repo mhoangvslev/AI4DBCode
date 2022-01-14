@@ -42,7 +42,7 @@ cost-training:
     name: "cost-training-50k"
     n_episodes: 50000
     data: sparql
-    save_every: 10
+    save_every: 1
     update_target_every: 3
     rewarder: "cost-improvement"
     device: cpu
