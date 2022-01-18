@@ -232,7 +232,7 @@ class JoinTree:
                 db_info.name2table[table.getFullName()].updateTable(table)
 
             self.aliasnames = setlist(self.aliasname2fromtable.keys())
-            self.comparison_list = list()
+            self.comparison_list: List[Union[ComparisonISQL, ComparisonSQL]] = list()
             self.comparison_list.extend([ComparisonISQL(x) for x in parse_result.filters])
             
             self.values_list: SetList[ValuesISQL] = setlist([ ValuesISQL(x) for x in parse_result.values ])
@@ -833,18 +833,19 @@ class JoinTree:
 
     def plan2Cost(self, forceLatency=False):
 
-        global refined_rewarder
-
+        refined_rewarder = SaGeRefinedCostImprovementRewarder.create()
         self.proposedPlan = self.toSql()
         
         cost = None
+        baseline_cost = None
 
         if config["model"]["rewarder"] == "refined-cost-improvement" and self.runner.isCostTraining:
-            cost = refined_rewarder.get_cost(self.proposedPlan)
+            cost, baseline_cost = refined_rewarder.get_reward(self.proposedPlan)
         else:
             cost = self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=True, forceLatency=forceLatency)
+            baseline_cost = self.runner.getLatency(self.sqlt, self.proposedPlan, force_order=False, forceLatency=forceLatency)
 
-        return self.proposedPlan, cost
+        return self.proposedPlan, cost, baseline_cost
 
     @property
     def plan(self):

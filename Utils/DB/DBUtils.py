@@ -1,4 +1,5 @@
 import logging
+from time import time
 from typing import Union
 from collections_extended.setlists import setlist
 import psycopg2
@@ -9,7 +10,8 @@ import os
 
 from math import log
 from Utils.DB.Client import Client, ISQLTimeoutException, SaGeClient, VirtuosoClient
-from Utils.Parser.JOBParser import ComparisonISQL, DummyTableISQL, TableISQL, TableSQL
+from Utils.Model.Rewarder import SaGeRefinedCostImprovementRewarder
+from Utils.Parser.JOBParser import ComparisonISQL, ComparisonSQL, DummyTableISQL, FromTableSQL, TableISQL, TableSQL
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
@@ -171,10 +173,13 @@ class PGRunner(DBRunner):
         conn.commit()
         return afterCost
 
-    def getSelectivity(self,table,whereCondition):
+    def getSelectivity(self,table: FromTableSQL, whereCondition: ComparisonSQL):
+        
+        whereHash = hash(whereCondition.toString())
+
         global selectivityDict
-        if whereCondition in selectivityDict:
-            return selectivityDict[whereCondition]
+        if whereHash in selectivityDict:
+            return selectivityDict[whereHash]
 
         conn = psycopg2.connect(
             database=self._dbname, 
@@ -186,7 +191,7 @@ class PGRunner(DBRunner):
         cursor = conn.cursor()
         
         cursor.execute("SET statement_timeout = "+str(int(100000))+ ";")
-        totalQuery = "select * from "+table+";"
+        totalQuery = f"SELECT * FROM {str(table)};"
         #     logging.debug(totalQuery)
 
         cursor.execute("EXPLAIN "+totalQuery)
@@ -195,15 +200,15 @@ class PGRunner(DBRunner):
         #     logging.debug(rows)
         total_rows = int(rows.split("rows=")[-1].split(" ")[0])
 
-        resQuery = "select * from "+table+" Where "+whereCondition+";"
+        resQuery = f"SELECT * FROM {str(table)} WHERE {whereCondition.toString()};"
         # logging.debug(resQuery)
-        cursor.execute("EXPLAIN  "+resQuery)
+        cursor.execute(f"EXPLAIN {resQuery}")
         rows = cursor.fetchall()[0][0]
         #     logging.debug(rows)
         select_rows = int(rows.split("rows=")[-1].split(" ")[0])
-        selectivityDict[whereCondition] = -log(select_rows/total_rows)
+        selectivityDict[whereHash] = -log(select_rows/total_rows)
         #     logging.debug(stored_selectivity_fake[whereCondition],select_rows,total_rows)
-        return selectivityDict[whereCondition]
+        return selectivityDict[whereHash]
 
 class ISQLRunner(DBRunner):
     def __init__(self, endpoint, graph, host="localhost", port="1111", client="virtuoso", isCostTraining = True,latencyRecord = True,latencyRecordFile = "RecordFile.json"):
@@ -249,13 +254,17 @@ class ISQLRunner(DBRunner):
         return afterCost
 
     def getCost(self, sql, sqlwithplan, force_order=False):
+        if config["model"]["rewarder"] == "refined-cost-improvement":
+            cost, _ = SaGeRefinedCostImprovementRewarder.create().get_reward(sqlwithplan)
+            return cost
         return self.dbClient.query_cost(sqlwithplan, force_order=force_order)
     
     def getSelectivity(self, table: DummyTableISQL, whereCondition: ComparisonISQL):
         tableString = str(table)
         whereString = whereCondition.toString()
         queryHash = hash(tableString + whereString)
-        if queryHash in selectivityDict:
+        
+        if queryHash in selectivityDict and config["database"]["engine_name"] == "virtuoso":
             return selectivityDict[queryHash]
 
         variables = [table.s, table.o]
@@ -267,6 +276,7 @@ class ISQLRunner(DBRunner):
                 logging.debug(f"{whereString} lacks variable {fv} from {variables} {tableString}")
                 return selectivityDict[queryHash]
 
+        startTime = time()
         totalQuery = f'SELECT * WHERE {{ {table} }}'
         total_rows = self.dbClient.query_cardinality(totalQuery)
 
@@ -274,4 +284,8 @@ class ISQLRunner(DBRunner):
         select_rows = self.dbClient.query_cardinality(resQuery)
 
         selectivityDict[queryHash] = -log(select_rows/total_rows)
+
+        endTime = time()
+        #print(f"It took {(endTime-startTime)*1e3} ms to calculate cardinality...")
+
         return selectivityDict[queryHash]

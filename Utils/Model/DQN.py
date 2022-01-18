@@ -144,8 +144,7 @@ class ENV(object):
         logging.debug(f"Selected total: {total} out of {len(table_list)}")
 
         if total == len(table_list):           
-            prediction, cost = self.sel.plan2Cost(forceLatency=forceLatency)
-            baseline_cost = self.sql.getDPlatency(forceLatency=forceLatency)
+            prediction, cost, baseline_cost = self.sel.plan2Cost(forceLatency=forceLatency)
             reward = 0
 
             if self._rewarder == "rtos":
@@ -211,22 +210,21 @@ class ReplayMemory(object):
 class DQN:
     def __init__(self,policy_net: SPINN, target_net: SPINN, db_info: DB, pgrunner: DBRunner, device: device, config: dict):
         self.config = config
-        self.Memory = ReplayMemory(1000)
-        self.BATCH_SIZE = 1
+        self.Memory = ReplayMemory(self.config["model"]["dqn_memory_capacity"])
+        self.BATCH_SIZE = self.config["model"]["dqn_batch_size"]
 
-        self.optimizer = optim.Adam(policy_net.parameters(),lr=3e-4,betas=(0.9,0.999))
+        self.optimizer = optim.Adam(policy_net.parameters(),lr=float(self.config["model"]["dqn_adam_learning_rate"]),betas=(0.9,0.999))
 
         self.steps_done = 0
-        self.max_action = 25
-        self.EPS_START = 0.4
-        self.EPS_END = 0.2
-        self.EPS_DECAY = 400
+        self.max_action = self.config["model"]["dqn_max_action"]
+        self.EPS_START = self.config["model"]["dqn_eps_start"]
+        self.EPS_END = self.config["model"]["dqn_eps_end"]
+        self.EPS_DECAY = self.config["model"]["dqn_eps_decay"]
         self.policy_net = policy_net
         self.target_net = target_net
         self.db_info = db_info
         self.pgrunner = pgrunner
         self.device = device
-        self.steps_done = 0
 
     def select_action(self, env: ENV, need_random = True) -> Tuple[Tensor, Tuple[str, str], Tensor]:
         """Decide the next action. During earlier episodes, actions will be chosen randomly but as the training goes on, only actions with minimal costs are chosen

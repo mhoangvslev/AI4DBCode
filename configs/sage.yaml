@@ -5,6 +5,6 @@ stateless: True
 graphs:
 -
   name: jobrdf
-  uri: http://localhost:8080/sparql/jobrdf
+  uri: http://localhost:8081/sparql/jobrdf
   backend: hdt-file
   file: /root/sage-engine/graphs/imdbfull.hdt

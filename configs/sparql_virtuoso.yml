@@ -35,7 +35,7 @@ cost-training:
   model:
     # Featurization
     max_column_in_table: 15
-    feature_size: 128
+    feature_size: 2048
     n_words: 1000
 
     # Train
@@ -44,9 +44,19 @@ cost-training:
     data: sparql
     save_every: 1
     update_target_every: 3
+    shuffle_train_every: 200
     rewarder: "cost-improvement"
     device: cpu
     checkpoint: "checkpoint-50k.yml"
+
+    # DQN
+    dqn_adam_learning_rate: 0.0003
+    dqn_memory_capacity: 10000
+    dqn_max_action: 25
+    dqn_eps_start: 0.4
+    dqn_eps_end: 0.2
+    dqn_eps_decay: 400
+    dqn_batch_size: 1
 
   logging:
     debug: 2 # 0 = None, 1 = console, 2 = file

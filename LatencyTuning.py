@@ -49,8 +49,7 @@ class LatencyTuning:
             datefmt='%m/%d/%Y %I:%M:%S'
         )
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if config['model']['device'] == "gpu" else torch.device("cpu")
-        #device = torch.device("cpu")
+        self.device = torch.device("cuda" if config['model']['device'] == "gpu" and torch.cuda.is_available() else "cpu")
 
         with open(self.config["database"]["pg_schema_file"], "r") as f:
             createSchema = "".join(f.readlines())
@@ -199,7 +198,7 @@ class LatencyTuning:
             
             if i_episode < self.checkpoint['checkpoint']: continue
 
-            if i_episode % 200 == 100:
+            if i_episode % self.config["model"]["shuffle_train_every"] == 0:
                 logging.debug("Resampling training set...")
                 trainSet = self.resample_sql(trainSet_temp)
             #     sql = random.sample(train_list_back,1)[0][0]

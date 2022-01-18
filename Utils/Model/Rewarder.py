@@ -1,3 +1,4 @@
+import pickle
 import logging
 
 from abc import ABC, abstractmethod
@@ -6,6 +7,7 @@ from typing import Optional, Tuple
 
 import yaml
 from Utils.DB.Client import Client, SaGeClient
+import numpy as np
 
 config = yaml.load(open(os.environ["RTOS_CONFIG"], 'r'), Loader=yaml.FullLoader)[os.environ["RTOS_TRAINTYPE"]]
 
@@ -36,9 +38,6 @@ class Rewarder(ABC):
         join_order = hash(query)
         if join_order not in self._plans:
             self._plans[join_order] = query
-        logging.debug(
-            f"rewarder - {'-' * 12} proposed plan:\n {self._plans[join_order]}"
-        )
         return self._plans[join_order]
 
     @abstractmethod
@@ -86,6 +85,17 @@ class Rewarder(ABC):
 class SaGeRefinedCostImprovementRewarder(Rewarder):
     """Class description"""
 
+    @staticmethod
+    def create():
+        fn = os.path.join("models", config["model"]["name"], "SaGeRefinedCostImprovementRewarder.pkl")
+        if os.path.exists(fn):
+            return pickle.load(open(fn, mode="rb"))
+        return SaGeRefinedCostImprovementRewarder()
+
+    def save(self):
+        fn = os.path.join("models", config["model"]["name"], "SaGeRefinedCostImprovementRewarder.pkl")
+        pickle.dump(self, open(fn, mode="wb"))
+
     def __init__(self):
         super().__init__(
             SaGeClient(
@@ -124,7 +134,7 @@ class SaGeRefinedCostImprovementRewarder(Rewarder):
             return self._costs[queryHash]
 
         next, cost = self.compute_refined_cost(
-            query.value, next=next, force_order=False
+            query, next=next, force_order=False
         )
 
         self._costs[queryHash] = cost
@@ -145,6 +155,7 @@ class SaGeRefinedCostImprovementRewarder(Rewarder):
             self._refinements[queryHash] = 0
 
         cost = self.get_refined_cost(query)
+        self.save()
 
         # update the join order's refinement level
         refinement = self._refinements[queryHash] + 1
@@ -154,5 +165,8 @@ class SaGeRefinedCostImprovementRewarder(Rewarder):
 
         return cost
     
-    def get_reward(self, query: str) -> float:
-        return self.get_cost(query)
+    def get_reward(self, query: str) -> Tuple[float, float]:
+        cost = self.get_cost(query) + 1
+        baseline_cost = self.get_baseline_cost(query) + 1
+        #reward = min(max(np.log10(cost / baseline_cost, 10), -10), 10)
+        return cost, baseline_cost

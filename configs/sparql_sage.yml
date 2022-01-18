@@ -24,8 +24,8 @@ cost-training:
     # SaGe
     sage_endpoint: "sparql"
     sage_host: localhost
-    sage_port: 8080
-    sage_graph: "http://localhost:8080/sparql/jobrdf"
+    sage_port: 8081
+    sage_graph: "http://localhost:8081/sparql/jobrdf"
     sage_max_steps: 12000
     sage_convergence_threshold: 10
   
@@ -44,9 +44,19 @@ cost-training:
     data: sparql
     save_every: 1
     update_target_every: 3
+    shuffle_train_every: 200
     rewarder: "refined-cost-improvement"
     device: cpu
     checkpoint: "checkpoint-50k.yml"
+
+    # DQN
+    dqn_adam_learning_rate: 0.0003
+    dqn_memory_capacity: 10000
+    dqn_max_action: 25
+    dqn_eps_start: 0.4
+    dqn_eps_end: 0.2
+    dqn_eps_decay: 400
+    dqn_batch_size: 1
 
   logging:
     debug: 2 # 0 = None, 1 = console, 2 = file
