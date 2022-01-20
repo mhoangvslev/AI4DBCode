@@ -1,0 +1,10 @@
+http://imdb.org/company_type#kind
+http://imdb.org/info_type#info
+http://imdb.org/movie_companies#company_type_id
+http://imdb.org/movie_companies#movie_id
+http://imdb.org/movie_companies#movie_info_idx#movie_id#movie_id
+http://imdb.org/movie_companies#note
+http://imdb.org/movie_info_idx#info_type_id
+http://imdb.org/movie_info_idx#movie_id
+http://imdb.org/title_t#production_year
+http://imdb.org/title_t#title

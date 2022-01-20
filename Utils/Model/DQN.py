@@ -15,18 +15,19 @@ import torch
 from collections import namedtuple
 from torchfold.torchfold import Fold
 
-from tqdm import tqdm
 from Utils.DB.DBUtils import DBRunner
 from Utils.Parser.JOBParser import DB
 from Utils.Model.TreeLSTM import SPINN
 from Utils.DB.QueryUtils import JoinTree, Query
 import torch.optim as optim
 import numpy as np
-from math import log
 from itertools import count
 import pandas as pd
 from scipy.stats import gmean
- 
+
+from joblib.externals.loky import set_loky_pickler
+from joblib import Parallel, delayed, parallel_backend, wrap_non_picklable_objects
+
 FOOP_CONST=10e13
 
 class ENV(object):
@@ -88,6 +89,28 @@ class ENV(object):
         self.hashs += right
         self.hashs += " "
 
+        """Candidate elimination
+        - Remove the candidate and its reverse
+        - Remove all other candidatesthat share the same right
+        - Remove all other candidates that share the same left
+        """
+
+        discard_list = [
+            (left, right),
+            (right, left)
+        ]
+    
+        for l, r in self.sel.join_candidate:
+            if l != left and r == right:
+                logging.debug(f"Removing {(l, r)} - same right")
+                discard_list.append((l, r))
+            
+            if r != right and l == left:
+                logging.debug(f"Removing {(l, r)} - same left")
+                discard_list.append((r, l))
+        
+        self.sel.join_candidate.difference_update(discard_list)
+
     def hashcode(self):
         return self.sql.sql+self.hashs
 
@@ -100,10 +123,11 @@ class ENV(object):
         Returns:
             List[Any]: List of all possible actions
         """
-        action_value_list = []
 
-        for one_join in self.sel.join_candidate:
-            
+        @delayed
+        @wrap_non_picklable_objects
+        def list_possible_actions(one_join):
+            res = None
             l_node, r_node = one_join[0], one_join[1]
 
             l_fa = self.sel.findFather(l_node)
@@ -113,11 +137,24 @@ class ENV(object):
                 """
                 flag1 = ( r_node == r_fa and l_fa != l_node )
                 if l_fa != r_fa and (self.sel.total == 0 or flag1):
-                    action_value_list.append((self.actionValue(l_node,r_node,model),one_join))
+                    res = (self.actionValue(l_node,r_node,model), one_join)
             
             elif self.planSpace == 1:
                 if l_fa != r_fa:
-                    action_value_list.append((self.actionValue(l_node,r_node,model),one_join))
+                    res = (self.actionValue(l_node,r_node,model),one_join)
+            return res
+        
+        parallel_args = {
+            "backend": self.config["model"]["backend"],
+            "n_jobs": self.config["model"]["n_jobs"],
+            #"require": "sharedmem",
+            #"prefer": "threads"
+        }
+
+        action_value_list = Parallel(**parallel_args)(
+            list_possible_actions(one_join) for one_join in self.sel.join_candidate
+        )
+        action_value_list = list(filter(None, action_value_list))
 
         logging.debug(f"Possible actions: {len(action_value_list)} out of {len(self.sel.join_candidate)} join candidates")
         return action_value_list
@@ -247,19 +284,16 @@ class DQN:
 
         action_list = env.allAction(self.policy_net)
         action_batch = torch.cat([x[0] for x in action_list],dim = 1)
+        
+        chosen_actions = (
+            action_list[torch.argmin(action_batch,dim = 1)[0]][1] 
+            if sample > eps_threshold else 
+            action_list[random.randint(0,len(action_list)-1)][1]
+        )
 
-        if sample > eps_threshold:
-            return (
-                action_batch, 
-                action_list[torch.argmin(action_batch,dim = 1)[0]][1],
-                [x[1] for x in action_list]
-            )
-        else:
-            return (
-                action_batch,
-                action_list[random.randint(0,len(action_list)-1)][1],
-                [x[1] for x in action_list]
-            )
+        all_actions = [x[1] for x in action_list]
+
+        return action_batch, chosen_actions, all_actions
 
 
     def validate(self, val_list: List[Query], tryTimes = 1, forceLatency=False, infos=dict()) -> Union[str, pd.DataFrame]:

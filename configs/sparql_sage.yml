@@ -35,7 +35,7 @@ cost-training:
   model:
     # Featurization
     max_column_in_table: 15
-    feature_size: 128
+    feature_size: 512
     n_words: 1000
 
     # Train
@@ -59,7 +59,7 @@ cost-training:
     dqn_batch_size: 1
 
   logging:
-    debug: 2 # 0 = None, 1 = console, 2 = file
+    debug: 0 # 0 = None, 1 = console, 2 = file
     use_wandb: false
     use_graphviz: false
     incl_mes: true

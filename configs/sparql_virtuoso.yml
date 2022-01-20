@@ -35,18 +35,18 @@ cost-training:
   model:
     # Featurization
     max_column_in_table: 15
-    feature_size: 2048
-    n_words: 1000
+    feature_size: 512
+    n_words: 500
 
     # Train
-    name: "cost-training-50k"
+    name: "cost-training-virtuoso-50k"
     n_episodes: 50000
     data: sparql
     save_every: 1
     update_target_every: 3
     shuffle_train_every: 200
     rewarder: "cost-improvement"
-    device: cpu
+    device: gpu
     checkpoint: "checkpoint-50k.yml"
 
     # DQN
@@ -58,8 +58,12 @@ cost-training:
     dqn_eps_decay: 400
     dqn_batch_size: 1
 
+    # Process
+    n_jobs: 1
+    backend: "threading" # loky, threading, multiprocessing
+
   logging:
-    debug: 2 # 0 = None, 1 = console, 2 = file
+    debug: 0 # 0 = None, 1 = console, 2 = file
     use_wandb: false
     use_graphviz: false
     incl_mes: true

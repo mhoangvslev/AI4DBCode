@@ -298,7 +298,7 @@ class Train:
                         logging.debug(f"time: {training_time}")
                         logging.debug("~~~~~~~~~~~~~~")
 
-                        torch.save(self.policy_net.cpu().state_dict(), os.path.join("models", self.config["model"]["name"], f'LatencyTuning_eps{i_episode}.pth'))
+                        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'LatencyTuning_eps{i_episode}.pth'))
                         self.checkpoint["checkpoint"] = i_episode
                         self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'LatencyTuning_eps{i_episode}.pth')
                         yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
@@ -307,7 +307,7 @@ class Train:
                     break
             if i_episode % self.config['model']['update_target_every'] == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
-        torch.save(self.policy_net.cpu().state_dict(), os.path.join("models", self.config["model"]["name"], 'LatencyTuning.pth'))
+        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], 'LatencyTuning.pth'))
         # policy_net = policy_net.cuda()
 
     def predict(self,queryfiles: List[AnyStr]) -> str:

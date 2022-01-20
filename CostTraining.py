@@ -228,7 +228,7 @@ class CostTraining:
                 # for act in action_list:
                 #     decision_tree.node(str(hash(act)), str(act))
 
-                logging.debug(f"Action list: {action_list}, chosen action: {chosen_action}")
+                logging.debug(f"Chosen action: {chosen_action}")
                 value_now = env.selectValue(self.policy_net)
                 next_value = torch.min(action_list).detach()
                 env_now = copy.deepcopy(env)
@@ -314,14 +314,14 @@ class CostTraining:
                         logging.debug(f"time: {training_time}")
                         logging.debug("~~~~~~~~~~~~~~")
 
-                        torch.save(self.policy_net.cpu().state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
+                        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
                         self.checkpoint["checkpoint"] = i_episode
                         self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
                         yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
                     break
             if i_episode % self.config['model']['update_target_every'] == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
-        torch.save(self.policy_net.cpu().state_dict(), os.path.join("models", self.config["model"]["name"], 'CostTraining.pth'))
+        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], 'CostTraining.pth'))
         # policy_net = policy_net.cuda()
 
     def predict(self, queryfiles: List[AnyStr], forceLatency=False) -> str:
@@ -350,7 +350,7 @@ class CostTraining:
                 # for act in action_list:
                 #     decision_tree.node(str(hash(act)), str(act))
 
-                logging.debug(f"Action list: {action_list}, chosen action: {chosen_action}")
+                logging.debug(f"Chosen action: {chosen_action}")
                 value_now = env.selectValue(self.policy_net)
                 next_value = torch.min(action_list).detach()
                 # e1Time = time.time()

@@ -351,13 +351,23 @@ class ComparisonISQLEqual:
         ]
 
     def breakdown(self):
-        return [
+        return (
             ComparisonDummy(*self.from_table.spo(), self.column_list, self.aliasname_list),
             ComparisonDummy(*self.target_table.spo(), self.column_list, self.aliasname_list)
-        ]
+        )
+
+    def __eq__(self, __o: object) -> bool:
+        return str(self) == str(__o)
+
+    def __hash__(self) -> int:
+        return sum(map(hash, self.breakdown()))
 
     def __str__(self) -> str:
-        raise NotImplementedError()
+        return str(tuple(map(str, self.breakdown())))
+
+    def toString(self) -> str:
+        res = " . ".join(map(lambda x: x.toString(), self.breakdown()))
+        return res
         
 class ComparisonISQL:
     def __init__(self, comparison) -> None:

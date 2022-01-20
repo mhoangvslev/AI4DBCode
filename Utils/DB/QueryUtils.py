@@ -175,26 +175,29 @@ class JoinTree:
                                 "type": "ss"
                             })
 
-                        if o_i == o_j and o_i.startswith("?"):
-                            # from_table: fromOther fromTable joinCol
-                            # target_table: targetOther targetTable joinCol
-                            equal_comparisons[f"{p_i} |><| {p_j} ({ o_i })"] = JoinISQL({
-                                "fromTable": p_i,
-                                "targetTable": p_j,
-                                "joinCol": o_i,
-                                "fromOtherCol": s_i,
-                                "targetOtherCol": s_j,
-                                "type": "oo"
-                            })
+                        if o_i == o_j:
 
-                            equal_comparisons[f"{p_j} |><| {p_i} ({ o_j })"] = JoinISQL({
-                                "fromTable": p_j,
-                                "targetTable": p_i,
-                                "joinCol": o_j,
-                                "fromOtherCol": s_j,
-                                "targetOtherCol": s_i,
-                                "type": "oo"
+                            if o_i.startswith("?"):
+                                # from_table: fromOther fromTable joinCol
+                                # target_table: targetOther targetTable joinCol
+                                equal_comparisons[f"{p_i} |><| {p_j} ({ o_i })"] = JoinISQL({
+                                    "fromTable": p_i,
+                                    "targetTable": p_j,
+                                    "joinCol": o_i,
+                                    "fromOtherCol": s_i,
+                                    "targetOtherCol": s_j,
+                                    "type": "oo"
                             })
+                            
+                            if o_j.startswith("?"):
+                                equal_comparisons[f"{p_j} |><| {p_i} ({ o_j })"] = JoinISQL({
+                                    "fromTable": p_j,
+                                    "targetTable": p_i,
+                                    "joinCol": o_j,
+                                    "fromOtherCol": s_j,
+                                    "targetOtherCol": s_i,
+                                    "type": "oo"
+                                })
                         
                         if o_i == s_j:
                             # from_table: fromOther fromTable joinCol
@@ -232,8 +235,8 @@ class JoinTree:
                 db_info.name2table[table.getFullName()].updateTable(table)
 
             self.aliasnames = setlist(self.aliasname2fromtable.keys())
-            self.comparison_list: List[Union[ComparisonISQL, ComparisonSQL]] = list()
-            self.comparison_list.extend([ComparisonISQL(x) for x in parse_result.filters])
+            self.comparison_list: List[Union[ComparisonISQL, ComparisonSQL]] = setlist()
+            self.comparison_list.update([ComparisonISQL(x) for x in parse_result.filters])
             
             self.values_list: SetList[ValuesISQL] = setlist([ ValuesISQL(x) for x in parse_result.values ])
             
@@ -241,8 +244,8 @@ class JoinTree:
 
             # Add equal comparison, albeit to a literal or a variable (join)
             for join_name, join in self.all_joins_list.items():
-                eq_comp = ComparisonISQLEqual(join_name, join).breakdown()
-                self.comparison_list.extend(eq_comp)
+                eq_comp = ComparisonISQLEqual(join_name, join)
+                self.comparison_list.add(eq_comp)
 
             logging.debug(f"There are {len(self.comparison_list)} comparisons")
             logging.debug('\n'.join(map(str, self.comparison_list)))
@@ -657,20 +660,16 @@ class JoinTree:
             #=================================
 
             # Equal comparisons are to be placed last
-            on_list = []
-            cpList = []
             joined_aliasname = setlist([self.left_aliasname[node],self.right_aliasname[node]])
             for left_table in self.aliasnames_set[left_son]:
                 for right_table, comparison in self.join_list[left_table]:
+                    comparisons = comparison.toString().split(" . ") if isinstance(comparison, ComparisonISQLEqual) else [comparison.toString()]
                     if right_table in self.aliasnames_set[right_son]:
                         left_aliasname, right_aliasname = comparison.aliasname_list[0], comparison.aliasname_list[1]
                         if ( left_aliasname in joined_aliasname and right_aliasname in joined_aliasname):
-                            cpList.append(comparison.toString())
+                            res.update(comparisons)
                         else:
-                            on_list.append(comparison.toString())
-
-            res.update(on_list + cpList)
-
+                            res.update(comparisons)
             return res
         else:
             return [str(self.aliasname2fromtable[node])]

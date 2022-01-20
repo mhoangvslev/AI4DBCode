@@ -11,3 +11,4 @@ collections-extended==2.0.0
 pandas
 scipy
 requests
+joblib
