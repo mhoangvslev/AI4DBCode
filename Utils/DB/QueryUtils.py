@@ -549,13 +549,16 @@ class JoinTree:
         self.total = 0
 
     def findFather(self,node_name: str) -> str:
-        """Retrieve the farthest ascendant of the given node
+        """Retrieve the farthest ascendant of the given node.
+
+        1. Find the farthest ascendant
+        2. Swap the node with the farthest ascendant and shift everyone in between down 1 generation
 
         Args:
             node_name (str): [description]
 
         Returns:
-            str: [description]
+            str: The farthest ascendant
         """
         fa_name = node_name
         while fa_name in self.aliasnames_fa.keys():

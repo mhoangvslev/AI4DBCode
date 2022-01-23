@@ -42,7 +42,8 @@ cost-training:
     name: "cost-training-virtuoso-50k"
     n_episodes: 50000
     data: sparql
-    save_every: 1
+    save_every: 250
+    validate_every: 20
     update_target_every: 3
     shuffle_train_every: 200
     rewarder: "cost-improvement"

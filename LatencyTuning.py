@@ -259,7 +259,7 @@ class LatencyTuning:
                         "step": t,
                         "reward": reward.item(),
                         "cost": cost,
-                        "base-cost": sqlt.getDPlatency()
+                        "base_cost": sqlt.getDPlatency()
                     }
 
                     training_summary = pd.DataFrame(data, index=[0])                

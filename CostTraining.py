@@ -200,7 +200,7 @@ class CostTraining:
         trainSet_temp = trainSet
         losses = []
         startTime = time.time()
-        print_every = self.config['model']['save_every']
+        training_summary = None
 
         for i_episode in tqdm(range(0,n_episodes), unit="episode"):
             
@@ -221,19 +221,24 @@ class CostTraining:
             action_this_epi = []
             nr = random.random()>0.3 or sqlt.getBestOrder()==None
             acBest = (not nr) and random.random()>0.7
-            for t in count():
-                # beginTime = time.time();
-                action_list, chosen_action, all_action = self.dqn.select_action(env, need_random=nr)
 
-                # for act in action_list:
-                #     decision_tree.node(str(hash(act)), str(act))
+            query_training_start_time = time.time()
+            for t in count():
+                action_list, chosen_action, _ = self.dqn.select_action(env, need_random=nr)
+
+                if self.config["logging"]["use_graphviz"]:
+                    for act in action_list:
+                        decision_tree.node(str(hash(act)), str(act))
 
                 logging.debug(f"Chosen action: {chosen_action}")
+                
                 value_now = env.selectValue(self.policy_net)
                 next_value = torch.min(action_list).detach()
                 env_now = copy.deepcopy(env)
+
                 if acBest:
                     chosen_action = sqlt.getBestOrder()[t]
+                
                 left = chosen_action[0]
                 right = chosen_action[1]
                 env.takeAction(left,right)
@@ -248,8 +253,6 @@ class CostTraining:
 
                 previous_state_list.append((value_now,next_value.view(-1,1),env_now))
                 if done:
-
-                    #             logging.debug("done")
                     next_value = 0
                     sqlt.updateBestOrder(reward.item(),action_this_epi)
 
@@ -258,21 +261,24 @@ class CostTraining:
 
                 if done:
 
+                    query_training_end_time = time.time()
+
                     data = {
                         "episode": i_episode,
                         "query": sqlt.filename,
                         "step": t,
                         "reward": reward.item(),
                         "cost": cost,
-                        "base-cost": sqlt.getDPlatency()
+                        "base_cost": sqlt.getDPlatency(),
+                        "train_duration_ms": (query_training_end_time - query_training_start_time)*1e3
                     }
 
-                    training_summary = pd.DataFrame(data, index=[0])                
-                    fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
-                    training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                    if training_summary is None:
+                        training_summary = pd.DataFrame(columns=data.keys())
+
+                    training_summary = training_summary.append(pd.DataFrame(data, index=[0]), ignore_index=True)
 
                     cnt = 0
-                    #             for idx in range(t-cnt+1):
                     global tree_lstm_memory
                     tree_lstm_memory = {}
                     self.dqn.Memory.push(env,expected_state_action_values,final_state_value)
@@ -280,22 +286,29 @@ class CostTraining:
                         cnt += 1
                         if expected_state_action_values > pair_s_v[1]:
                             expected_state_action_values = pair_s_v[1]
-                        #                 for idx in range(cnt):
                         expected_state_action_values = expected_state_action_values
                         self.dqn.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
-                    #                 break
                     loss = 0
 
                 if done:
-                    # break
                     loss, pre_gd_time, gd_time = self.dqn.optimize_model()
                     # loss = dqn.optimize_model()
                     # loss = dqn.optimize_model()
                     # loss = dqn.optimize_model()
                     losses.append(loss)
-                    if (i_episode%print_every==0):
+                    if (i_episode%self.config['model']['save_every']==0):
+                        fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
+                        training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                        training_summary = None
+
+                        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
+                        self.checkpoint["checkpoint"] = i_episode
+                        self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
+                        yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
+
+                    if (i_episode%self.config["model"]["validate_every"]):
                         logging.debug(np.mean(losses))
-                        logging.debug(f"###################### Epoch {i_episode//print_every}")
+                        logging.debug(f'###################### Epoch {i_episode//self.config["model"]["validate_every"]}')
                         
                         training_time = time.time()-startTime
 
@@ -313,11 +326,6 @@ class CostTraining:
 
                         logging.debug(f"time: {training_time}")
                         logging.debug("~~~~~~~~~~~~~~")
-
-                        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
-                        self.checkpoint["checkpoint"] = i_episode
-                        self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
-                        yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
                     break
             if i_episode % self.config['model']['update_target_every'] == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -343,6 +351,8 @@ class CostTraining:
             nr = True
             nr = random.random()>0.3 or sqlt.getBestOrder()==None
             acBest = (not nr) and random.random()>0.7
+
+            query_prediction_start_time = time.time()
             for t in count():
                 # beginTime = time.time();
                 action_list, chosen_action, all_action = self.dqn.select_action(env, need_random=nr)
@@ -353,10 +363,8 @@ class CostTraining:
                 logging.debug(f"Chosen action: {chosen_action}")
                 value_now = env.selectValue(self.policy_net)
                 next_value = torch.min(action_list).detach()
-                # e1Time = time.time()
                 env_now = copy.deepcopy(env)
-                # endTime = time.time()
-                # logging.debug(f"make {endTime-startTime,endTime-e1Time}")
+
                 if acBest:
                     chosen_action = sqlt.getBestOrder()[t]
                 left = chosen_action[0]
@@ -397,22 +405,23 @@ class CostTraining:
                     loss = 0
 
                 if done:
-                    # break
+                    query_prediction_end_time = time.time()
                     loss, pre_gd_time, gd_time = self.dqn.optimize_model()                        
                     infos = {
                         "pre_gd_time_ms": pre_gd_time, 
                         "gd_time_ms": gd_time, 
-                        "loss": loss
+                        "loss": loss,
+                        "prediction_duration_ms": (query_prediction_end_time - query_prediction_start_time)*1e3
                     }
 
-                    prediction, summary = self.dqn.validate([sqlt], forceLatency=forceLatency, infos=infos)
+                    prediction, summary_prediction = self.dqn.validate([sqlt], forceLatency=forceLatency, infos=infos)
 
                     with open(sql_out, mode="w") as f:
                         f.write(prediction)
                         f.close()
 
-                    fn = os.path.join("models", self.config["model"]["name"], "summary-predict.csv")
-                    summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                    fn = os.path.join("models", self.config["model"]["name"], "summary-prediction.csv")
+                    summary_prediction.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
 
                     break
 

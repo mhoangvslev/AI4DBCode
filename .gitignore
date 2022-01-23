@@ -16,4 +16,4 @@ Cost.json
 
 poetry.lock
 
-*.yml
+configs/*_test.yml

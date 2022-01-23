@@ -325,6 +325,7 @@ class DQN:
             pg_cost = sql.getDPlatency(forceLatency=forceLatency)
             env = ENV(sql,self.db_info,self.pgrunner,self.device, self.config)
 
+            query_validation_start_time = time.time()
             for t in count():
                 action_list, chosen_action, all_action = self.select_action(env,need_random=False)
 
@@ -335,15 +336,17 @@ class DQN:
                 prediction, cost, reward, done = env.reward(forceLatency=forceLatency)
                 
                 if done:
+                    query_validation_end_time = time.time()
                     rewards.append(reward)
                     mes += reward
 
                     data = {
-                            "query": sql.filename,
-                            "step": t,
-                            "reward": reward,
-                            "cost": cost,
-                            "base-cost": pg_cost
+                        "query": sql.filename,
+                        "step": t,
+                        "reward": reward,
+                        "cost": cost,
+                        "base_cost": pg_cost,
+                        "validation_duration_ms": (query_validation_end_time - query_validation_start_time)*1e3
                     }
                     data.update(infos)
 
