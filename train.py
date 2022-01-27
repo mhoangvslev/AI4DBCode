@@ -78,9 +78,9 @@ class Train:
         for name, param in self.policy_net.named_parameters():
             logging.debug(f"Parameter: {name} of shape {param.shape}")
             if len(param.shape)==2:
-                init.xavier_normal(param)
+                init.xavier_normal_(param)
             else:
-                init.uniform(param)
+                init.uniform_(param)
 
         self.checkpoint = None
 

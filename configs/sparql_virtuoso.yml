@@ -39,13 +39,14 @@ cost-training:
     n_words: 500
 
     # Train
-    name: "cost-training-virtuoso-50k"
-    n_episodes: 50000
+    name: "cost-training-virtuoso"
+    n_episodes: 500
     data: sparql
-    save_every: 250
-    validate_every: 20
+    save_every: 1
+    validate_every: 10
     update_target_every: 3
     shuffle_train_every: 200
+    early_stopping: false
     rewarder: "cost-improvement"
     device: gpu
     checkpoint: "checkpoint-50k.yml"

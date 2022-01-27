@@ -389,7 +389,7 @@ class DQN:
         endTime = time.time()
 
         pre_descend_time = endTime - startTime
-        loss = F.smooth_l1_loss(value_now,next_value,size_average=True)
+        loss = F.smooth_l1_loss(value_now,next_value,reduction="mean")
         self.optimizer.zero_grad()
 
         delta_start = time.time()

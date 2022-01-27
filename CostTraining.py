@@ -77,9 +77,9 @@ class CostTraining:
         for name, param in self.policy_net.named_parameters():
             logging.debug(f"Parameter: {name} of shape {param.shape}")
             if len(param.shape)==2:
-                init.xavier_normal(param)
+                init.xavier_normal_(param)
             else:
-                init.uniform(param)
+                init.uniform_(param)
 
         self.checkpoint = None
 
@@ -197,136 +197,168 @@ class CostTraining:
 
     def train(self, trainSet: List[Query], validateSet: List[Query], n_episodes=10000):
 
-        trainSet_temp = trainSet
+        trainSet_temp: List[Query] = np.array(trainSet)
         losses = []
         startTime = time.time()
         training_summary = None
+        validation_summary = None
+
+        last_validation_loss = None
 
         for i_episode in tqdm(range(0,n_episodes), unit="episode"):
             
             if i_episode < self.checkpoint['checkpoint']: continue
 
-            if i_episode % self.config["model"]["shuffle_train_every"] == 100:
-                logging.debug("Resampling training set...")
-                trainSet = self.resample_sql(trainSet_temp)
-            #     sql = random.sample(train_list_back,1)[0][0]
-            sqlt = random.sample(trainSet[0:],1)[0]
-            env = ENV(sqlt,self.db_info,self.runner,self.device, self.config)
+            # if i_episode % self.config["model"]["shuffle_train_every"] == 100:
+            #     logging.debug("Resampling training set...")
+            #     trainSet = self.resample_sql(trainSet_temp)
+            # sqlt = random.sample(trainSet[0:],1)[0]
 
-            if config["logging"]["use_graphviz"]:
-                format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
-                decision_tree = gv.Digraph(format=format, graph_attr={"rankdir": "LR"})
+            if i_episode % config["model"]["shuffle_train_every"] == 0:
+                np.random.shuffle(trainSet_temp)
 
-            previous_state_list = []
-            action_this_epi = []
-            nr = random.random()>0.3 or sqlt.getBestOrder()==None
-            acBest = (not nr) and random.random()>0.7
-
-            query_training_start_time = time.time()
-            for t in count():
-                action_list, chosen_action, _ = self.dqn.select_action(env, need_random=nr)
-
-                if self.config["logging"]["use_graphviz"]:
-                    for act in action_list:
-                        decision_tree.node(str(hash(act)), str(act))
-
-                logging.debug(f"Chosen action: {chosen_action}")
-                
-                value_now = env.selectValue(self.policy_net)
-                next_value = torch.min(action_list).detach()
-                env_now = copy.deepcopy(env)
-
-                if acBest:
-                    chosen_action = sqlt.getBestOrder()[t]
-                
-                left = chosen_action[0]
-                right = chosen_action[1]
-                env.takeAction(left,right)
-                action_this_epi.append((left,right))
+            for qidx, sqlt in enumerate(tqdm(trainSet_temp, unit="query")):
+                env = ENV(sqlt,self.db_info,self.runner,self.device, self.config)
 
                 if config["logging"]["use_graphviz"]:
-                    fn = os.path.basename(sqlt.filename).split('.')[0]
-                    decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
+                    format = os.environ['RTOS_GV_FORMAT'] if os.environ.get('RTOS_GV_FORMAT') is not None else 'svg'
+                    decision_tree = gv.Digraph(format=format, graph_attr={"rankdir": "LR"})
 
-                prediction, cost, reward, done = env.reward()
-                reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
+                previous_state_list = []
+                action_this_epi = []
+                nr = random.random()>0.3 or sqlt.getBestOrder()==None
+                acBest = (not nr) and random.random()>0.7
 
-                previous_state_list.append((value_now,next_value.view(-1,1),env_now))
-                if done:
-                    next_value = 0
-                    sqlt.updateBestOrder(reward.item(),action_this_epi)
+                query_training_start_time = time.time()
+                for t in count():
+                    action_list, chosen_action, _ = self.dqn.select_action(env, need_random=nr)
 
-                expected_state_action_values = (next_value ) + reward.detach()
-                final_state_value = (next_value ) + reward.detach()
+                    if self.config["logging"]["use_graphviz"]:
+                        for act in action_list:
+                            decision_tree.node(str(hash(act)), str(act))
 
-                if done:
+                    logging.debug(f"Chosen action: {chosen_action}")
+                    
+                    value_now = env.selectValue(self.policy_net)
+                    next_value = torch.min(action_list).detach()
+                    env_now = copy.deepcopy(env)
 
-                    query_training_end_time = time.time()
+                    if acBest:
+                        chosen_action = sqlt.getBestOrder()[t]
+                    
+                    left = chosen_action[0]
+                    right = chosen_action[1]
+                    env.takeAction(left,right)
+                    action_this_epi.append((left,right))
 
-                    data = {
-                        "episode": i_episode,
-                        "query": sqlt.filename,
-                        "step": t,
-                        "reward": reward.item(),
-                        "cost": cost,
-                        "base_cost": sqlt.getDPlatency(),
-                        "train_duration_ms": (query_training_end_time - query_training_start_time)*1e3
-                    }
+                    if config["logging"]["use_graphviz"]:
+                        fn = os.path.basename(sqlt.filename).split('.')[0]
+                        decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
 
-                    if training_summary is None:
-                        training_summary = pd.DataFrame(columns=data.keys())
+                    prediction, cost, reward, done = env.reward()
+                    reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
 
-                    training_summary = training_summary.append(pd.DataFrame(data, index=[0]), ignore_index=True)
+                    previous_state_list.append((value_now,next_value.view(-1,1),env_now))
+                    if done:
+                        next_value = 0
+                        sqlt.updateBestOrder(reward.item(),action_this_epi)
 
-                    cnt = 0
-                    global tree_lstm_memory
-                    tree_lstm_memory = {}
-                    self.dqn.Memory.push(env,expected_state_action_values,final_state_value)
-                    for pair_s_v in previous_state_list[:0:-1]:
-                        cnt += 1
-                        if expected_state_action_values > pair_s_v[1]:
-                            expected_state_action_values = pair_s_v[1]
-                        expected_state_action_values = expected_state_action_values
-                        self.dqn.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
-                    loss = 0
+                    expected_state_action_values = (next_value ) + reward.detach()
+                    final_state_value = (next_value ) + reward.detach()
 
-                if done:
-                    loss, pre_gd_time, gd_time = self.dqn.optimize_model()
-                    # loss = dqn.optimize_model()
-                    # loss = dqn.optimize_model()
-                    # loss = dqn.optimize_model()
-                    losses.append(loss)
-                    if (i_episode%self.config['model']['save_every']==0):
-                        fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
-                        training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
-                        training_summary = None
+                    if done:
 
-                        torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
-                        self.checkpoint["checkpoint"] = i_episode
-                        self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
-                        yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
+                        query_training_end_time = time.time()
 
-                    if (i_episode%self.config["model"]["validate_every"]):
-                        logging.debug(np.mean(losses))
-                        logging.debug(f'###################### Epoch {i_episode//self.config["model"]["validate_every"]}')
-                        
-                        training_time = time.time()-startTime
-
-                        infos = {
-                           "episode": i_episode, 
-                           "training_time": training_time,                
-                           "pre_gd_time_ms": pre_gd_time, 
-                           "gd_time_ms": gd_time, 
-                           "loss": np.mean(losses)
+                        data = {
+                            "episode": i_episode,
+                            "query": sqlt.filename,
+                            "step": t,
+                            "reward": reward.item(),
+                            "cost": cost,
+                            "base_cost": sqlt.getDPlatency(),
+                            "train_duration_ms": (query_training_end_time - query_training_start_time)*1e3
                         }
 
-                        _, validation_summary = self.dqn.validate(validateSet, infos=infos)
-                        fn = os.path.join("models", self.config["model"]["name"], "summary-validation.csv")
-                        validation_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                        if training_summary is None:
+                            training_summary = pd.DataFrame(columns=data.keys())
 
-                        logging.debug(f"time: {training_time}")
-                        logging.debug("~~~~~~~~~~~~~~")
+                        training_summary = training_summary.append(pd.DataFrame(data, index=[0]), ignore_index=True)
+
+                        cnt = 0
+                        global tree_lstm_memory
+                        tree_lstm_memory = {}
+                        self.dqn.Memory.push(env,expected_state_action_values,final_state_value)
+                        for pair_s_v in previous_state_list[:0:-1]:
+                            cnt += 1
+                            if expected_state_action_values > pair_s_v[1]:
+                                expected_state_action_values = pair_s_v[1]
+                            expected_state_action_values = expected_state_action_values
+                            self.dqn.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
+                        loss = 0
+
+                    if done:
+                        loss, pre_gd_time, gd_time = self.dqn.optimize_model()
+                        # loss = dqn.optimize_model()
+                        # loss = dqn.optimize_model()
+                        # loss = dqn.optimize_model()
+                        losses.append(loss)
+                        
+                        #if (i_episode%self.config["model"]["validate_every"]):
+                        if qidx == len(trainSet_temp) - 1:
+                            logging.debug(np.mean(losses))
+                            logging.debug(f'###################### Epoch {i_episode//self.config["model"]["validate_every"]}')
+                            
+                            training_time = time.time()-startTime
+
+                            infos = {
+                                "episode": i_episode, 
+                                "training_time": training_time,                
+                                "pre_gd_time_ms": pre_gd_time, 
+                                "gd_time_ms": gd_time, 
+                                "loss": loss,
+                                "avg_loss": np.mean(losses)
+                            }
+                            
+                            _, __validation_summary = self.dqn.validate(validateSet, infos=infos)
+
+                            if validation_summary is None:
+                                validation_summary = pd.DataFrame(columns=__validation_summary.columns)
+
+                            validation_summary = validation_summary.append(__validation_summary, ignore_index=True)
+                            
+                            logging.debug(f"time: {training_time}")
+                            logging.debug("~~~~~~~~~~~~~~")
+                        break
+
+            early_stopping = False
+            if self.config["model"]["early_stopping"] and i_episode > 0:
+                fn = os.path.join("models", self.config["model"]["name"], "summary-validation.csv")
+                offset = (i_episode-1)*len(validateSet) + int(i_episode == 1)
+                last_validation_loss = pd.read_csv(fn, skiprows=offset, names=validation_summary.columns).tail(1)["loss"].item()
+                early_stopping = np.mean(losses) > last_validation_loss
+            
+            if i_episode%self.config['model']['save_every']==0 or early_stopping:
+                # Save training log
+                fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
+                training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                training_summary = None
+
+                # Save validation log
+                fn = os.path.join("models", self.config["model"]["name"], "summary-validation.csv")
+                validation_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
+                validation_summary = None
+
+                # Save the model
+                torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
+                self.checkpoint["checkpoint"] = i_episode
+                self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
+                yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
+
+                if early_stopping:
+                    print("Stopping early...")
                     break
+
             if i_episode % self.config['model']['update_target_every'] == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
         torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], 'CostTraining.pth'))
