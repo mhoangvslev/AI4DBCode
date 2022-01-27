@@ -89,7 +89,7 @@ class LatencyTuning:
                 raise FileExistsError("LatencyTuning requires the model from CostTraining!")
             self.policy_net.load_state_dict(torch.loados.path.join("models", self.config["model"]["name"], "CostTraining.pth"))
         else:
-            self.policy_net.load_state_dict(torch.load(self.checkpoint["latest_model"]))
+            self.policy_net.load_state_dict(torch.load(self.checkpoint["latest_model"], map_location=self.device))
         # policy_net.load_state_dict(torch.load("models/JOB_tc.pth"))#load cost train model
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
