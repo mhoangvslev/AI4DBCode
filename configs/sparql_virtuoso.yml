@@ -46,7 +46,7 @@ cost-training:
     validate_every: 10
     update_target_every: 3
     shuffle_train_every: 200
-    early_stopping: false
+    early_stopping_patience: 50 # 0 means disabled
     rewarder: "cost-improvement"
     device: gpu
     checkpoint: "checkpoint-50k.yml"

@@ -86,6 +86,8 @@ class CostTraining:
         if not os.path.exists(os.path.join("models", self.config["model"]["name"], self.config['model']['checkpoint'])):
             self.checkpoint = dict({
                 "checkpoint": 0,
+                "best_model": 0,
+                "best_loss": np.inf,
                 "latest_model": os.path.join("models", self.config["model"]["name"], "CostTraining.pth")
             })
         else:
@@ -198,15 +200,18 @@ class CostTraining:
 
         trainSet_temp: List[Query] = np.array(trainSet)
         losses = []
+        avg_eps_losses = []
         startTime = time.time()
         training_summary = None
         validation_summary = None
-
         last_validation_loss = None
+        best_episode = None
 
         for i_episode in tqdm(range(0,n_episodes), unit="episode"):
             
             if i_episode < self.checkpoint['checkpoint']: continue
+
+            avg_eps_losses = []
 
             # if i_episode % self.config["model"]["shuffle_train_every"] == 100:
             #     logging.debug("Resampling training set...")
@@ -302,6 +307,9 @@ class CostTraining:
                         # loss = dqn.optimize_model()
                         # loss = dqn.optimize_model()
                         losses.append(loss)
+                        avg_eps_losses.append(loss)
+
+                        avg_loss = np.mean(losses)
                         
                         #if (i_episode%self.config["model"]["validate_every"]):
                         if qidx == len(trainSet_temp) - 1:
@@ -316,7 +324,7 @@ class CostTraining:
                                 "pre_gd_time_ms": pre_gd_time, 
                                 "gd_time_ms": gd_time, 
                                 "loss": loss,
-                                "avg_loss": np.mean(losses)
+                                "avg_loss": avg_loss
                             }
                             
                             _, __validation_summary = self.dqn.validate(validateSet, infos=infos)
@@ -331,13 +339,21 @@ class CostTraining:
                         break
 
             early_stopping = False
-            if self.config["model"]["early_stopping"] and i_episode > 0:
+            save_best_model = False
+            if self.config["model"]["early_stopping_patience"] > 0 and i_episode > 0:
                 fn = os.path.join("models", self.config["model"]["name"], "summary-validation.csv")
                 offset = (i_episode-1)*len(validateSet) + int(i_episode == 1)
                 last_validation_loss = pd.read_csv(fn, skiprows=offset, names=validation_summary.columns).tail(1)["loss"].item()
-                early_stopping = np.mean(losses) > last_validation_loss
+                avg_eps_loss = np.mean(avg_eps_losses).item()
+
+                if avg_eps_loss < self.checkpoint["best_loss"] or best_episode is None:
+                    self.checkpoint["best_loss"] = avg_eps_loss
+                    best_episode = i_episode
+                    save_best_model = True
+                
+                early_stopping = avg_loss > last_validation_loss and (i_episode - best_episode) >= self.config["model"]["early_stopping_patience"]
             
-            if i_episode%self.config['model']['save_every']==0 or early_stopping:
+            if i_episode%self.config['model']['save_every']==0:
                 # Save training log
                 fn = os.path.join("models", self.config["model"]["name"], "summary-training.csv")
                 training_summary.to_csv(fn, mode="a", header=(not os.path.exists(fn)), index=False)
@@ -352,7 +368,15 @@ class CostTraining:
                 torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], f'CostTraining.pth'))
                 self.checkpoint["checkpoint"] = i_episode
                 self.checkpoint["latest_model"] = os.path.join("models", self.config["model"]["name"], f'CostTraining.pth')
+                self.checkpoint["best_model"] = best_episode
                 yaml.dump(self.checkpoint, open(os.path.join("models", self.config["model"]["name"], self.config["model"]["checkpoint"]), 'w'))
+
+                if save_best_model:
+                    print("Saving best model...")
+                    save_dir = os.path.join('models', config['model']['name'])
+                    cmd = f"tar -zcvf {save_dir + '/best-model.tar.gz'} -C {save_dir} {self.config['model']['checkpoint']} CostTraining.pth summary-training.csv summary-validation.csv"
+                    subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+                    save_best_model = False
 
                 if early_stopping:
                     print("Stopping early...")
@@ -360,6 +384,7 @@ class CostTraining:
 
             if i_episode % self.config['model']['update_target_every'] == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
+            
         torch.save(self.policy_net.state_dict(), os.path.join("models", self.config["model"]["name"], 'CostTraining.pth'))
         # policy_net = policy_net.cuda()
 
@@ -385,11 +410,7 @@ class CostTraining:
 
             query_prediction_start_time = time.time()
             for t in count():
-                # beginTime = time.time();
                 action_list, chosen_action, all_action = self.dqn.select_action(env, need_random=nr)
-
-                # for act in action_list:
-                #     decision_tree.node(str(hash(act)), str(act))
 
                 logging.debug(f"Chosen action: {chosen_action}")
                 value_now = env.selectValue(self.policy_net)
@@ -402,9 +423,6 @@ class CostTraining:
                 right = chosen_action[1]
                 env.takeAction(left,right)
                 action_this_epi.append((left,right))
-
-                # fn = os.path.basename(sqlt.filename).split('.')[0]
-                # decision_tree.render(os.path.join(config["database"]["JOBDir"], fn, f"{fn}_dtree_{t}.gv"))
 
                 prediction, cost, reward, done = env.reward()
                 reward = torch.tensor([reward], device=self.device, dtype = torch.float32).view(-1,1)
@@ -421,7 +439,6 @@ class CostTraining:
 
                 if done:
                     cnt = 0
-                    #             for idx in range(t-cnt+1):
                     global tree_lstm_memory
                     tree_lstm_memory = {}
                     self.dqn.Memory.push(env,expected_state_action_values,final_state_value)
@@ -429,10 +446,8 @@ class CostTraining:
                         cnt += 1
                         if expected_state_action_values > pair_s_v[1]:
                             expected_state_action_values = pair_s_v[1]
-                        #                 for idx in range(cnt):
                         expected_state_action_values = expected_state_action_values
                         self.dqn.Memory.push(pair_s_v[2],expected_state_action_values,final_state_value)
-                    #                 break
                     loss = 0
 
                 if done:

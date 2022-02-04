@@ -7,6 +7,21 @@ syntax_error(){
     "
 }
 
+if [ -z $VIRTUOSO_DB ]; then
+    echo "VIRTUOSO_DB is not set, defaulting to current directory..."
+    export VIRTUOSO_DB=$(realpath .)
+fi
+
+if [ -z $SAGE_CONFIG ]; then
+    echo "SAGE_CONFIG is not set, defaulting to current directory..."
+    export SAGE_CONFIG=$(realpath .)
+fi
+
+if [ -z $SAGE_GRAPH ]; then
+    echo "SAGE_GRAPH is not set, defaulting to current directory..."
+    export SAGE_GRAPH=$(realpath .)
+fi
+
 if [ "$1" = "start" -a "$2" = "postgres" ]; then
     docker-compose up -d postgres;
     if [ "$3" = "init" ]; then
@@ -18,7 +33,8 @@ if [ "$1" = "start" -a "$2" = "postgres" ]; then
     fi
     exit 0;
 elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
-    VIRTUOSO_DB=$VIRTUOSO_DB docker-compose up -d virtuoso;
+    export VIRTUOSO_DB=$(realpath $VIRTUOSO_DB)
+    docker-compose up -d virtuoso;
     attempt=0
 
     until echo $(docker exec virtuoso bash -c 'echo "sparql select distinct ?g where { graph ?g { ?s a ?c } };" > tmp.sparql && ./isql localhost:1111 dba dba tmp.sparql') | grep -o "http://example.com/DAV/void" ; 
@@ -39,7 +55,9 @@ elif [ "$1" = "start" -a "$2" = "virtuoso" ]; then
     echo "Virtuoso is succesfully setup!"
 
 elif [ "$1" = "start" -a "$2" = "sage" ]; then
-    SAGE_CONFIG=$(realpath $SAGE_CONFIG) SAGE_GRAPH=$(realpath $SAGE_GRAPH) docker-compose up -d sage-engine;
+    export SAGE_CONFIG=$(realpath $SAGE_CONFIG) 
+    export SAGE_GRAPH=$(realpath $SAGE_GRAPH) 
+    docker-compose up -d sage-engine;
     attempt=0
 
     until echo $(curl -H "Content-Type: application/json" -d '{"query": "SELECT * WHERE { ?s a ?c }", "defaultGraph": "http://localhost:8081/sparql/jobrdf"}' http://localhost:8081/sparql) | grep -o "cost" ; 

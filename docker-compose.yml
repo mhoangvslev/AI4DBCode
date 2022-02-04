@@ -29,8 +29,8 @@ services:
       - '1111:1111'
       - '4000:4000'
     volumes:
-      - '${VIRTUOSO_DB}:/root/virtuoso-opensource/database'
-      - '/tmp:/tmp'
+      - "${VIRTUOSO_DB}:/root/virtuoso-opensource/database"
+      - "/tmp:/tmp"
     command: bash -c "./virtuoso-t +configfile ../database/virtuoso.ini && flask run --host=0.0.0.0 --port=4000"
   
   sage-engine:
@@ -39,8 +39,8 @@ services:
     ports:
       - '8081:8081'
     volumes:
-      - ${SAGE_GRAPH}:/root/sage-engine/graphs
-      - ${SAGE_CONFIG}:/root/sage-engine/config/sage.yaml
+      - "${SAGE_GRAPH}:/root/sage-engine/graphs"
+      - "${SAGE_CONFIG}:/root/sage-engine/config/sage.yaml"
     entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "poetry run sage config/sage.yaml --workers=1 --port=8081"'
     #entrypoint: 'conda run --no-capture-output -n xp /bin/bash -c "sh launch.sh sage"'
     
@@ -77,12 +77,21 @@ services:
     build: 
       dockerfile: docker/jupyter.Dockerfile
       context: .
+    volumes:
+      - "./models/cost-training-virtuoso:/content/"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia 
+              capabilities: [gpu]
     devices:
       - /dev/nvidia0:/dev/nvidia0
       - /dev/nvidiactl:/dev/nvidiactl
       - /dev/nvidia-modeset:/dev/nvidia-modeset
       - /dev/nvidia-uvm:/dev/nvidia-uvm
       - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+    #command: nvidia-smi
     entrypoint: 'jupyter notebook --allow-root --NotebookApp.allow_origin=https://colab.research.google.com --port=8080 --NotebookApp.port_retries=0'
 
 networks:
